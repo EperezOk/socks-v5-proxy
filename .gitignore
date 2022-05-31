@@ -75,3 +75,5 @@ settings.json
 
 #PVS-Studio Stuff
 strace_out
+
+patches
