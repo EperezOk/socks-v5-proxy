@@ -87,12 +87,13 @@ main(const int argc, const char **argv) {
     // man 7 ip. no importa reportar nada si falla.
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, (const void*)sock_optval, sock_optlen);
   
-    
+    // Bind to ALL the address 
     if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {  
         err_msg = "unable to bind socket";
         goto finally;
     }
 
+    //server socket pasivo para escuchar, con una queue de tamaño MAX_CONNECTIONS(512)
     if (listen(server, MAX_CONNECTIONS) < 0) {
         err_msg = "unable to listen";
         goto finally;

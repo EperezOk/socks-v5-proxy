@@ -1,7 +1,7 @@
 include ./include/Makefile.inc
 
-SOURCES_CLIENT := $(wildcard ./client/*)
-SOURCES_SERVER := $(wildcard ./server/*)
+SOURCES_CLIENT := $(wildcard ./client/*.c)
+SOURCES_SERVER := $(wildcard ./server/*.c)
 
 OBJECTS_CLIENT := $(OBJECT_CLIENT:.c=.o) $(SOURCES_CLIENT:.c=.o)
 OBJECTS_SERVER := $(OBJECT_SERVER:.c=.o) $(SOURCES_SERVER:.c=.o)
