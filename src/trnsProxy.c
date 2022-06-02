@@ -93,9 +93,9 @@ int main(int argc , char *argv[]) {
              
             // if valid socket descriptor then add to read list
             if(sd > 0) {
-                if (buffer_can_write(&client_socket[i].readBuffController))
+                //if (buffer_can_write(&client_socket[i].readBuffController))
                     FD_SET(sd, &readfds);
-                if (buffer_can_read(&client_socket[i].writeBuffController))
+                //if (buffer_can_read(&client_socket[i].writeBuffController))
                     FD_SET(sd, &writefds);
             }
              
@@ -199,14 +199,14 @@ int main(int argc , char *argv[]) {
                 size_t readRbytes = 0; //  lo que puedo leer nuevo
                 read_ptr = buffer_read_ptr(br, &readRbytes); //
                 
-                size_t readBytes = readRbytes > writeRbytes ? writeRbytes: readRbytes;
-                uint8_t *write_ptr = buffer_write_ptr(br, &writeBytes);
-                memcpy(read_ptr, read_ptr, readBytes);
+		size_t readBytes;
+                uint8_t *write_ptr = buffer_write_ptr(bw, &readBytes); // cuanto puedo escribir
+		readBytes = readBytes > readRbytes ? readRbytes : readBytes;             
 
-                size_t writtenBytes = rbytes > wbytes ? wbytes : rbytes;
-                memcpy(write_ptr, read_ptr, writtenBytes);
-                buffer_read_adv(br, writtenBytes);
-                buffer_write_adv(bw, writtenBytes);
+		memcpy(write_ptr, read_ptr, readBytes);
+
+                buffer_read_adv(br, readBytes);
+                buffer_write_adv(bw, readBytes);
             }
         }
     }
