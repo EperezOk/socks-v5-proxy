@@ -34,8 +34,11 @@ int main(int argc , char *argv[]) {
     int master_socket, addrlen, new_socket, activity, i, valread, sd;
 
     client client_socket[MAX_CLIENTS];
-    for(int i = 0; i < MAX_CLIENTS; i++)
+    for(int i = 0; i < MAX_CLIENTS; i++) {
         client_socket[i].fd = 0;
+        bufferInit(&client_socket[i].readBuffController, BUFF_SIZE, client_socket[i].readBuff);
+        bufferInit(&client_socket[i].writeBuffController, BUFF_SIZE, client_socket[i].writeBuff);
+    }
 
     // create a master socket - socket pasivo
     // type: SOCK_STREAM | SOCK_NONBLOCK para hacerlo no bloqueante
@@ -91,11 +94,11 @@ int main(int argc , char *argv[]) {
             // socket descriptor
             sd = client_socket[i].fd;
              
-            // if valid socket descriptor then add to read list
+            // if valid socket descriptor then add to select
             if(sd > 0) {
-                //if (buffer_can_write(&client_socket[i].readBuffController))
+                if (bufferCanWrite(&client_socket[i].readBuffController))
                     FD_SET(sd, &readfds);
-                //if (buffer_can_read(&client_socket[i].writeBuffController))
+                if (bufferCanRead(&client_socket[i].writeBuffController))
                     FD_SET(sd, &writefds);
             }
              
@@ -141,13 +144,16 @@ int main(int argc , char *argv[]) {
         // else its some IO operation on some other socket :)
         for (i = 0; i < MAX_CLIENTS; i++) {
             sd = client_socket[i].fd;
+            
+            buffer *br = &client_socket[i].readBuffController;
+            buffer *bw = &client_socket[i].writeBuffController;
+            size_t wbytes;
+            size_t rbytes;
               
             if (FD_ISSET(sd, &readfds)) {
-                buffer *br = &client_socket[i].readBuffController;
-                size_t wbytes = 0;
-                uint8_t *read_ptr = buffer_write_ptr(br, &wbytes);
+                wbytes = bufferFreeSpace(br);
                 // check if it was for closing
-                if ((valread = read(sd, read_ptr, wbytes)) == 0) {
+                if ((valread = read(sd, getWritePtr(br), wbytes)) == 0) {
                     // somebody disconnected, get his details and print
                     getpeername(sd , (struct sockaddr*)&address, (socklen_t*)&addrlen);
                     printf("Host disconnected , ip %s , port %d \n", inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
@@ -158,55 +164,23 @@ int main(int argc , char *argv[]) {
                 }
                 // else echo back the message that came in
                 else {
-                    buffer_write_adv(br, valread);
-                    /*
-                    Paso 1:
-                    readBuffer:  4 5 6 - -
-                    writeBuffer: - - - - -
-                    
-                    Paso 2:
-                    readBuffer:  - - - - -
-                    writeBuffer: 4 5 6 - -
-
-                    Paso 3:
-                    readBuffer:  3 - - - -
-                    writeBuffer: 4 5 6 1 2
-                    */
-                    size_t rbytes = 0;
-                    read_ptr = buffer_read_ptr(br, &rbytes);
-
-                    // CHECK: guardar cosas en el writeBuffer en este momento?
-                    buffer *bw = &client_socket[i].writeBuffController;
-                    uint8_t *write_ptr = buffer_write_ptr(bw, &wbytes);
-                    size_t writtenBytes = rbytes > wbytes ? wbytes : rbytes;
-                    memcpy(write_ptr, read_ptr, writtenBytes);
-                    buffer_read_adv(br, writtenBytes);
-                    buffer_write_adv(bw, writtenBytes);
+                    // confirmamos cant bytes leidos con read
+                    advanceWritePtr(br, valread);
+                    // pasamos todo lo posible de lo leido al buf de escritura
+                    rbytes = bufferWrite(bw, getReadPtr(br), bufferPendingRead(br));
+                    // confirmamos cant bytes leidos con bufferWrite()
+                    advanceReadPtr(br, rbytes);
                 }
             }
 
             if (FD_ISSET(sd, &writefds)) {
-                // PARA NO BLOQUEAR ACA, EL SELECT DEBERIA CHECKEAR TAMBIEN SOCKETS DE ESCRITURA (3er param, ademas de los de lectura). Para poder hacer eso y pasar a la siguiente ronda sin hacer el send en esta y haciendolo en la proxima, cada socket de escritura necesitara un buffer para mandar el send() en la proxima ronda
-                buffer *bw = &client_socket[i].writeBuffController;
-                size_t writeRbytes = 0; // lo que lei del write buffer
-                uint8_t *read_ptr = buffer_read_ptr(bw, &writeRbytes);
-
-                send(sd, read_ptr, writeRbytes, 0); // OJO: ESTO PODRIA BLOQUEARSE si el cliente no consume y se llena el buffer de salida
-
-                buffer_read_adv(bw, writeRbytes);
-
-                buffer *br = &client_socket[i].readBuffController;
-                size_t readRbytes = 0; //  lo que puedo leer nuevo
-                read_ptr = buffer_read_ptr(br, &readRbytes); //
-                
-		size_t readBytes;
-                uint8_t *write_ptr = buffer_write_ptr(bw, &readBytes); // cuanto puedo escribir
-		readBytes = readBytes > readRbytes ? readRbytes : readBytes;             
-
-		memcpy(write_ptr, read_ptr, readBytes);
-
-                buffer_read_adv(br, readBytes);
-                buffer_write_adv(bw, readBytes);
+                rbytes = send(sd, getReadPtr(bw), bufferPendingRead(bw), 0); // OJO: ESTO PODRIA BLOQUEARSE si el cliente no consume y se llena el buffer de salida
+                // confirmamos cant bytes leidos con send()
+                advanceReadPtr(bw, rbytes);
+                // rellenamos el buffer de escritura todo lo posible con lo que quedaba pendiente
+                rbytes = bufferWrite(bw, getReadPtr(br), bufferPendingRead(br));
+                // confirmamos cant bytes leidos con bufferWrite()
+                advanceReadPtr(br, rbytes);
             }
         }
     }
