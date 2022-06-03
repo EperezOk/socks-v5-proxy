@@ -2,7 +2,7 @@
 #define BUFFER_H_VelRDAxzvnuFmwEaR0ftrkIinkT
 
 #include <stdbool.h>
-#include <unistd.h>  // size_t, ssize_t
+#include <unistd.h>
 
 /**
  * buffer.c - buffer con acceso directo (útil para I/O) que mantiene
@@ -26,10 +26,6 @@
  *
  * Se quiere escribir en el bufer cuatro bytes.
  *
- * ptr + 0 <- buffer_write_ptr(b, &wbytes), wbytes=6
- * n = read(fd, ptr, wbytes)
- * buffer_write_adv(b, n = 4)
- *
  * R=0
  * ↓
  * +---+---+---+---+---+---+
@@ -39,8 +35,6 @@
  *                W=4      limit=6
  *
  * Quiero leer 3 del buffer
- * ptr + 0 <- buffer_read_ptr, wbytes=4
- * buffer_read_adv(b, 3);
  *
  *            R=3
  *             ↓
@@ -51,8 +45,6 @@
  *                W=4      limit=6
  *
  * Quiero escribir 2 bytes mas
- * ptr + 4 <- buffer_write_ptr(b, &wbytes=2);
- * buffer_write_adv(b, 2)
  *
  *            R=3
  *             ↓
@@ -81,8 +73,9 @@
  * ↑                       ↑
  * W=0                     limit=6
  */
-typedef struct buffer buffer;
-struct buffer {
+
+typedef struct buffer {
+    /** posicion de memoria del extremo izquierdo del buffer */
     uint8_t *data;
 
     /** límite superior del buffer. inmutable */
@@ -93,57 +86,58 @@ struct buffer {
 
     /** puntero de escritura */
     uint8_t *write;
-};
+} buffer;
 
 /**
  * inicializa el buffer sin utilizar el heap
  */
-void
-buffer_init(buffer *b, const size_t n, uint8_t *data);
+void bufferInit(buffer *b, const size_t n, uint8_t *data);
 
 /**
- * Retorna un puntero donde se pueden escribir hasta `*nbytes`.
- * Se debe notificar mediante la función `buffer_write_adv'
+ * Recibe un buffer y la cantidad de bytes a escribir (deseables).
+ * Retorna la cantidad de bytes que pudieron escribirse.
  */
-uint8_t *
-buffer_write_ptr(buffer *b, size_t *nbyte);
-void
-buffer_write_adv(buffer *b, const ssize_t bytes);
+size_t bufferWrite(buffer *b, const void *src, size_t nbyte);
 
-uint8_t *
-buffer_read_ptr(buffer *b, size_t *nbyte);
-void
-buffer_read_adv(buffer *b, const ssize_t bytes);
+/**
+ * Recibe un buffer y lee todo lo posible hacia el mismo.
+ * Retorna la cantidad de bytes leidos.
+ */
+size_t bufferRead(buffer *b, void *dest);
 
 /**
  * obtiene un byte
  */
-uint8_t
-buffer_read(buffer *b);
+uint8_t bufferReadByte(buffer *b);
+
+uint8_t* getReadPtr(buffer *b);
+
+uint8_t* getWritePtr(buffer *b);
 
 /** escribe un byte */
-void
-buffer_write(buffer *b, uint8_t c);
+void bufferWriteByte(buffer *b, uint8_t c);
 
-/**
- * compacta el buffer
- */
-void
-buffer_compact(buffer *b);
+/** avanza el puntero de escritura */
+void advanceWritePtr(buffer *b, const ssize_t bytes);
+
+/** avanza el puntero de lectura */
+void advanceReadPtr(buffer *b, const ssize_t bytes);
 
 /**
  * Reinicia todos los punteros
  */
-void
-buffer_reset(buffer *b);
+void bufferReset(buffer *b);
 
 /** retorna true si hay bytes para leer del buffer */
-bool
-buffer_can_read(buffer *b);
+bool bufferCanRead(buffer *b);
 
 /** retorna true si se pueden escribir bytes en el buffer */
-bool
-buffer_can_write(buffer *b);
+bool bufferCanWrite(buffer *b);
 
+/** retorna la cantidad de bytes a leer en el buffer */
+size_t bufferPendingRead(buffer *b);
+
+/** retorna la cantidad de bytes disponibles para escribir en el buffer */
+size_t bufferFreeSpace(buffer *b);
 
 #endif
