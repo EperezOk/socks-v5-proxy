@@ -12,4 +12,10 @@ server:
 clean:
 	cd $(SOURCES_FOLDER); make $@
 
-.PHONY: all clean client server
+proxy:
+	cd $(SOURCES_FOLDER); make $@
+
+cleanp:
+	cd $(SOURCES_FOLDER); make $@
+
+.PHONY: all clean client server proxy

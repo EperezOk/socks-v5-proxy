@@ -25,7 +25,7 @@
 
 #include "include/socks5.h"
 #include "include/selector.h"
-// #include "socks5nio.h"
+#include "socks5nio.h"
 #include "include/server.h"
 
 static bool done = false;

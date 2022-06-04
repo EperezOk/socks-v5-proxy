@@ -10,6 +10,7 @@
 #include <arpa/inet.h>    //close
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include "include/buffer.h"
@@ -32,6 +33,17 @@ typedef struct client {
 int main(int argc , char *argv[]) {
     int opt = TRUE;
     int master_socket, addrlen, new_socket, activity, i, valread, sd;
+    int http_socket;
+    struct addrinfo hints;
+    struct addrinfo *remote_servers, *tmp;
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+
+    if((getaddrinfo("www.google.com", "80", &hints, &remote_servers)) != 0){
+        perror("getaddrinfo failed");
+        exit(EXIT_FAILURE);
+    }
 
     client client_socket[MAX_CLIENTS];
     for(int i = 0; i < MAX_CLIENTS; i++) {
@@ -44,6 +56,11 @@ int main(int argc , char *argv[]) {
     // type: SOCK_STREAM | SOCK_NONBLOCK para hacerlo no bloqueante
     if ((master_socket = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if((http_socket = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+        perror("http socket failed");
         exit(EXIT_FAILURE);
     }
   
@@ -164,6 +181,28 @@ int main(int argc , char *argv[]) {
                 }
                 // else echo back the message that came in
                 else {
+                    int i=1;
+                    char server_ip[50] = {0};
+                    char* request = "GET /humans.txt HTTP/1.1\r\n\r\n";
+                    char response[5000] = {0};
+                    if((connect(http_socket, remote_servers->ai_addr, sizeof(struct sockaddr))) == -1){
+                        perror("connect failed");
+                        exit(EXIT_FAILURE);
+                    }
+                    send(http_socket, request, strlen(request), 0);
+                    while(read(http_socket, response, 4999) > 0){
+                        printf("%s", response);
+                    }
+                    /*
+                    printf("Host www.google.com:\n");
+                    for(tmp = remote_servers ; tmp != NULL ; tmp = tmp->ai_next){
+                        inet_ntop(tmp->ai_family, tmp->ai_addr->sa_data, server_ip, 50);
+                        ptr = &((struct sockaddr_in *)tmp->ai_addr)->sin_addr;
+                        inet_ntop(tmp->ai_family, ptr, server_ip, 50);
+                        printf("- Host #%d: %s\n", i, server_ip);
+                        i++;
+                    }
+                    */
                     // confirmamos cant bytes leidos con read
                     advanceWritePtr(br, valread);
                     // pasamos todo lo posible de lo leido al buf de escritura
@@ -185,5 +224,7 @@ int main(int argc , char *argv[]) {
         }
     }
       
+    freeaddrinfo(remote_servers);
+
     return 0;
 }

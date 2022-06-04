@@ -24,5 +24,13 @@ $(TARGET_SERVER): $(OBJECTS_SERVER)
 
 clean:
 	rm -rf $(OBJECTS) $(TARGETS)
-	
+
+# TODO: DELETE AFTER TRANSPARENT PROXY IS DELETED
+proxy: trnsProxy.o ./server/buffer.o
+	$(COMPILER) $(CFLAGS) $^ -o ../$@.out
+
+cleanp:
+	make clean;
+	rm -f ./trnsProxy.o ../proxy.out;
+
 .PHONY: all clean $(TARGET_CLIENT) $(TARGET_SERVER)
