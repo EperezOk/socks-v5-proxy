@@ -23,9 +23,9 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-#include "socks5.h"
-#include "selector.h"
-#include "socks5nio.h"
+#include "include/socks5.h"
+#include "include/selector.h"
+// #include "socks5nio.h"
 #include "include/server.h"
 
 static bool done = false;
@@ -70,7 +70,7 @@ main(const int argc, const char **argv) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY); // Aceptamos cualquier ip y puerto
+    addr.sin_addr.s_addr = htonl(INADDR_ANY); // Aceptamos cualquier ip de la red local
     addr.sin_port        = htons(port); // htons translates a short integer from host byte order to network byte order. 
 
     // creacion del socket pasivo
@@ -83,7 +83,7 @@ main(const int argc, const char **argv) {
     fprintf(stdout, "Listening on TCP port %d\n", port);
 
     int sock_optval[] = { 1 }; //  valor de SO_REUSEADDR
-    socklent_t sock_optlen = sizeof(int);
+    socklen_t sock_optlen = sizeof(int);
     // man 7 ip. no importa reportar nada si falla.
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, (const void*)sock_optval, sock_optlen);
   
@@ -94,7 +94,7 @@ main(const int argc, const char **argv) {
     }
 
     //server socket pasivo para escuchar, con una queue de tamaño MAX_CONNECTIONS(512)
-    if (listen(server, MAX_CONNECTIONS) < 0) {
+    if (listen(server, 5) < 0) {
         err_msg = "unable to listen";
         goto finally;
     }
@@ -130,7 +130,7 @@ main(const int argc, const char **argv) {
 
     // handlers para cada tipo de accion (read, write y close) sobre los fds del SELECT
     const struct fd_handler socksv5 = {
-        .handle_read       = socksv5_passive_accept,
+        .handle_read       = socks5PassiveAccept,
         .handle_write      = NULL,
         .handle_close      = NULL, // nada que liberar
     };
@@ -141,7 +141,8 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    for(;!done;) {
+    // termina con un ctrl + C pero dejando un mensajito
+    while(!done) {
         err_msg = NULL;
         // se bloquea hasta que haya eventos disponible y los despacha.
         ss = selector_select(selector);
@@ -173,7 +174,7 @@ finally:
     }
     selector_close();
 
-    socksv5_pool_destroy();
+    // socksv5_pool_destroy(); // TODO
 
     if(server >= 0) {
         close(server);
