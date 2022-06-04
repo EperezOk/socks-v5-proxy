@@ -23,31 +23,36 @@
 #define WELCOME_MSG "Transparent Proxy v1.0 \r\n"
 
 typedef struct client {
-    int fd;
+    int fd; // accept fd
     struct buffer writeBuffController;
     uint8_t writeBuff[BUFF_SIZE];
     struct buffer readBuffController;
     uint8_t readBuff[BUFF_SIZE];
+    int originFd; // origin server fd
 } client;
 
 int main(int argc , char *argv[]) {
     int opt = TRUE;
-    int master_socket, addrlen, new_socket, activity, i, valread, sd;
-    int http_socket;
+    int master_socket, addrlen, new_socket, activity, i;
+
+    // RESOLUCION NOMBRES - TODO: REMOVE FROM HERE
     struct addrinfo hints;
-    struct addrinfo *remote_servers, *tmp;
+    struct addrinfo *remote_servers;
 
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;
 
+    // getaddrinfo bloqueante
     if((getaddrinfo("www.google.com", "80", &hints, &remote_servers)) != 0){
         perror("getaddrinfo failed");
         exit(EXIT_FAILURE);
     }
 
+
     client client_socket[MAX_CLIENTS];
     for(int i = 0; i < MAX_CLIENTS; i++) {
         client_socket[i].fd = 0;
+        client_socket[i].originFd = 0;
         bufferInit(&client_socket[i].readBuffController, BUFF_SIZE, client_socket[i].readBuff);
         bufferInit(&client_socket[i].writeBuffController, BUFF_SIZE, client_socket[i].writeBuff);
     }
@@ -59,10 +64,10 @@ int main(int argc , char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if((http_socket = socket(AF_INET, SOCK_STREAM, 0)) == 0){
-        perror("http socket failed");
-        exit(EXIT_FAILURE);
-    }
+    // if((http_socket = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+    //     perror("http socket failed");
+    //     exit(EXIT_FAILURE);
+    // }
   
     // set master socket to allow multiple connections , this is just a good habit, it will work without this
     if (setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0) {
@@ -105,23 +110,32 @@ int main(int argc , char *argv[]) {
         // add master socket to set
         FD_SET(master_socket, &readfds);
         int max_sd = master_socket;
+        int sd, osfd;
          
         // check if there are child sockets to set and set them
         for (i = 0; i < MAX_CLIENTS; i++) {
             // socket descriptor
             sd = client_socket[i].fd;
+            osfd = client_socket[i].originFd;
              
             // if valid socket descriptor then add to select
-            if(sd > 0) {
+            if(sd > 0 && osfd > 0) {                
                 if (bufferCanWrite(&client_socket[i].readBuffController))
-                    FD_SET(sd, &readfds);
+                    FD_SET(sd, &readfds); // cliente escribe y leemos en readBuf
+
+                if (bufferCanWrite(&client_socket[i].writeBuffController))
+                    FD_SET(osfd, &readfds); // origin escribe y leemos en writeBuf
+
                 if (bufferCanRead(&client_socket[i].writeBuffController))
-                    FD_SET(sd, &writefds);
+                    FD_SET(sd, &writefds); // cliente lee de writeBuf
+
+                if (bufferCanRead(&client_socket[i].readBuffController))
+                    FD_SET(osfd, &writefds); // origin lee de readBuf
             }
              
             // highest file descriptor number, need it for the select function
-            if(sd > max_sd)
-                max_sd = sd;
+            if(sd > max_sd || osfd > max_sd)
+                max_sd = sd > osfd ? sd : osfd;
         }
   
         // wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
@@ -152,6 +166,18 @@ int main(int argc , char *argv[]) {
                 // if position is empty
                 if (client_socket[i].fd == 0) {
                     client_socket[i].fd = new_socket;
+
+                    // create origin server socket
+                    if ((client_socket[i].originFd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+                        perror("origin socket failed");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if((connect(client_socket[i].originFd, remote_servers->ai_addr, sizeof(struct sockaddr))) == -1) {
+                        perror("origin server connect failed");
+                        exit(EXIT_FAILURE);
+                    }
+
                     printf("Adding to list of sockets as %d\n" , i);
                     break;
                 }
@@ -161,11 +187,13 @@ int main(int argc , char *argv[]) {
         // else its some IO operation on some other socket :)
         for (i = 0; i < MAX_CLIENTS; i++) {
             sd = client_socket[i].fd;
+            osfd = client_socket[i].originFd;
             
             buffer *br = &client_socket[i].readBuffController;
             buffer *bw = &client_socket[i].writeBuffController;
             size_t wbytes;
             size_t rbytes;
+            int valread;
               
             if (FD_ISSET(sd, &readfds)) {
                 wbytes = bufferFreeSpace(br);
@@ -181,18 +209,10 @@ int main(int argc , char *argv[]) {
                 }
                 // else echo back the message that came in
                 else {
-                    int i=1;
-                    char server_ip[50] = {0};
-                    char* request = "GET /humans.txt HTTP/1.1\r\n\r\n";
-                    char response[5000] = {0};
-                    if((connect(http_socket, remote_servers->ai_addr, sizeof(struct sockaddr))) == -1){
-                        perror("connect failed");
-                        exit(EXIT_FAILURE);
-                    }
-                    send(http_socket, request, strlen(request), 0);
-                    while(read(http_socket, response, 4999) > 0){
-                        printf("%s", response);
-                    }
+                    // send(http_socket, request, strlen(request), 0);
+                    // while(read(http_socket, response, 4999) > 0){
+                    //     printf("%s", response);
+                    // }
                     /*
                     printf("Host www.google.com:\n");
                     for(tmp = remote_servers ; tmp != NULL ; tmp = tmp->ai_next){
@@ -205,21 +225,38 @@ int main(int argc , char *argv[]) {
                     */
                     // confirmamos cant bytes leidos con read
                     advanceWritePtr(br, valread);
-                    // pasamos todo lo posible de lo leido al buf de escritura
-                    rbytes = bufferWrite(bw, getReadPtr(br), bufferPendingRead(br));
-                    // confirmamos cant bytes leidos con bufferWrite()
-                    advanceReadPtr(br, rbytes);
                 }
+            }
+
+            if (FD_ISSET(osfd, &readfds)) {
+                wbytes = bufferFreeSpace(bw);
+                // check if it was for closing
+                if ((valread = recv(osfd, getWritePtr(bw), wbytes, 0)) == 0) {
+                    // somebody disconnected, get his details and print
+                    getpeername(osfd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+                    printf("Google disconnected , ip %s , port %d \n", inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+                      
+                    // close the socket and mark as 0 in list for reuse
+                    close(osfd);
+                    client_socket[i].originFd = 0;
+                }
+                // else echo back the message that came in
+                else {
+                    // confirmamos cant bytes leidos con read
+                    advanceWritePtr(bw, valread);
+                }
+            }
+
+            if (FD_ISSET(osfd, &writefds)) {
+                rbytes = send(osfd, getReadPtr(br), bufferPendingRead(br), 0);
+                // confirmamos cant bytes leidos con send
+                advanceReadPtr(br, rbytes);
             }
 
             if (FD_ISSET(sd, &writefds)) {
                 rbytes = send(sd, getReadPtr(bw), bufferPendingRead(bw), 0); // OJO: ESTO PODRIA BLOQUEARSE si el cliente no consume y se llena el buffer de salida
                 // confirmamos cant bytes leidos con send()
                 advanceReadPtr(bw, rbytes);
-                // rellenamos el buffer de escritura todo lo posible con lo que quedaba pendiente
-                rbytes = bufferWrite(bw, getReadPtr(br), bufferPendingRead(br));
-                // confirmamos cant bytes leidos con bufferWrite()
-                advanceReadPtr(br, rbytes);
             }
         }
     }

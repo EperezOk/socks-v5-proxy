@@ -23,9 +23,9 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-#include "include/socks5.h"
+// #include "include/socks5.h"
 #include "include/selector.h"
-#include "socks5nio.h"
+#include "include/socks5nio.h"
 #include "include/server.h"
 
 static bool done = false;
@@ -93,7 +93,7 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    //server socket pasivo para escuchar, con una queue de tamaño MAX_CONNECTIONS(512)
+    //server socket pasivo para escuchar
     if (listen(server, 5) < 0) {
         err_msg = "unable to listen";
         goto finally;
