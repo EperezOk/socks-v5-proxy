@@ -14,7 +14,7 @@
 #include <netinet/in.h>
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include <fcntl.h>
-#include "include/buffer.h"
+#include "transp-proxy/buffer.h"
 
 #define TRUE   1
 #define FALSE  0

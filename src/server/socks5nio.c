@@ -12,8 +12,8 @@
 
 #include <arpa/inet.h>
 
-#include "hello.h"
-#include "request.h"
+#include "../include/hello.h"
+#include "../include/request.h"
 #include "../include/buffer.h"
 
 #include "../include/stm.h"
@@ -87,7 +87,23 @@ struct hello_st {
  * liberarlo finalmente, y un pool para reusar alocaciones previas.
  */
 struct socks5 {
-…
+    
+    /** informacion del cliente */
+    int                           client_fd;
+    struct sockaddr_storage       client_addr; // direccion IP
+    socklen_t                     client_addr_len; // tamaño de IP (v4 o v6)
+
+    /** resolucion de la direc del origin server */
+    struct addrinfo               *origin_resolution;
+    /** intento actual de la direccion del origin server */
+    struct addrinfo               *origin_resolution_current;
+
+    /** informacion del origin server */
+    int                           origin_fd;
+    struct sockaddr_storage       origin_addr;
+    socklen_t                     origin_addr_len;
+    int                           origin_domain;
+
     /** maquinas de estados */
     struct state_machine          stm;
 
@@ -97,14 +113,49 @@ struct socks5 {
         struct request_st         request;
         struct copy               copy;
     } client;
+
     /** estados para el origin_fd */
     union {
         struct connecting         conn;
         struct copy               copy;
     } orig;
-…
+
+    /** buffers para ser usados read_buffer, write_buffer */
+    uint8_t raw_buff_a[1024], raw_buff_b[1024];
+    buffer read_buffer, write_buffer;
+
+    /** cantidad de referencias a este objeto. si es 1 se debe destruir. */
+    unsigned references;
+
+    struct socks5 *next; // siguiente en la pool
 };
 
+/** Pool de structs socks5 para ser reusados */
+static const unsigned   max_pool = 50; // tamaño max
+static unsigned         pool_size = 0; // tamaño actual
+static struct socks5    *pool = 0;     // pool propiamente dicho
+
+static const struct state_definition *socks5_describe_states(void);
+
+static struct socks5 *socks5_new(int client_fd) {
+    struct socks5 *ret;
+
+    if (pool == NULL) {
+        ret = malloc(sizeof(*ret));
+    } else {
+        ret = pool;
+        pool = pool->next;
+        ret->next = 0; // lo sacamos de la pool para retornarlo y usarlo
+    }
+
+    if (ret == NULL)
+        goto finally;
+    
+    memset(ret, 0x00, sizeof(*ret)); // inicializamos en 0 todo
+    ret->origin_fd = -1;
+    ret->client_fd = client_fd;
+    ret->client_addr_len = sizeof(ret->client_addr);
+}
 
 /** realmente destruye */
 static void
@@ -158,6 +209,7 @@ static void socksv5_read   (struct selector_key *key);
 static void socksv5_write  (struct selector_key *key);
 static void socksv5_block  (struct selector_key *key);
 static void socksv5_close  (struct selector_key *key);
+// Los handlers particulares de cada estado se definen en los hooks del estado particular (struct state_definition)
 static const struct fd_handler socks5_handler = {
     .handle_read   = socksv5_read,
     .handle_write  = socksv5_write,
@@ -180,6 +232,8 @@ socksv5_passive_accept(struct selector_key *key) {
     if(selector_fd_set_nio(client) == -1) {
         goto fail;
     }
+
+    // instancio estructura de estado
     state = socks5_new(client);
     if(state == NULL) {
         // sin un estado, nos es imposible manejaro.
@@ -190,6 +244,8 @@ socksv5_passive_accept(struct selector_key *key) {
     memcpy(&state->client_addr, &client_addr, client_addr_len);
     state->client_addr_len = client_addr_len;
 
+    // handlers default que avanzan la maquina de estados, nos registramos para lectura esperando el HELLO_READ.
+    // Los handlers particulares de cada estado se definen en los hooks del estado particular (struct state_definition)
     if(SELECTOR_SUCCESS != selector_register(key->s, client, &socks5_handler,
                                               OP_READ, state)) {
         goto fail;
@@ -224,8 +280,7 @@ hello_read_init(const unsigned state, struct selector_key *key) {
     d->rb                              = &(ATTACHMENT(key)->read_buffer);
     d->wb                              = &(ATTACHMENT(key)->write_buffer);
     d->parser.data                     = &d->method;
-    d->parser.on_authentication_method = on_hello_method, hello_parser_init(
-            &d->parser);
+    d->parser.on_authentication_method = on_hello_method, hello_parser_init(&d->parser);
 }
 
 static unsigned
@@ -285,6 +340,7 @@ static const struct state_definition client_statbl[] = {
         .on_read_ready    = hello_read,
     },
 …
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Handlers top level de la conexión pasiva.

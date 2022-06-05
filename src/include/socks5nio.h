@@ -1,10 +1,13 @@
 #ifndef SOCKS5NIO_H
 #define SOCKS5NIO_H
 
-void
-socksv5_pool_destroy(void);
+#include <netdb.h>
+#include "selector.h"
 
-void
-socksv5_passive_accept(struct selector_key *key);
+/** handler del socket pasivo que atiende conexiones socksv5 */
+void socksv5_passive_accept(struct selector_key *key);
+
+/** libera pools internos */
+void socksv5_pool_destroy(void);
 
 #endif

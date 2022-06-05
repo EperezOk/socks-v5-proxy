@@ -105,7 +105,7 @@ struct item {
    int                 fd;
    fd_interest         interest;
    const fd_handler   *handler;
-   void *              data;
+   void *              data; // se espera que sea un struct socks5 * al parecer, ver ATTACHMENT
 };
 
 /* tarea bloqueante */
@@ -220,6 +220,7 @@ items_max_fd(fd_selector s) {
     return max;
 }
 
+// borra el item de los fd_sets y los vuelve a setear segun sus intereses actuales
 static void
 items_update_fdset_for_fd(fd_selector s, const struct item * item) {
     FD_CLR(item->fd, &s->master_r);
@@ -343,7 +344,7 @@ selector_register(fd_selector        s,
     }
     // 1. tenemos espacio?
     size_t ufd = (size_t)fd;
-    if(ufd > s->fd_size) {
+    if(ufd >= s->fd_size) {
         ret = ensure_capacity(s, ufd);
         if(SELECTOR_SUCCESS != ret) {
             goto finally;
@@ -465,7 +466,7 @@ handle_iteration(fd_selector s) {
                     }
                 }
             }
-            if(FD_ISSET(i, &s->slave_w)) {
+            if(FD_ISSET(item->fd, &s->slave_w)) {
                 if(OP_WRITE & item->interest) {
                     if(0 == item->handler->handle_write) {
                         assert(("OP_WRITE arrived but no handler. bug!" == 0));

@@ -94,7 +94,7 @@ selector_destroy(fd_selector s);
  * Intereses sobre un file descriptor (quiero leer, quiero escribir, …)
  *
  * Son potencias de 2, por lo que se puede requerir una conjunción usando el OR
- * de bits.
+ * de bits (interest = OP_READ | OP_WRITE)
  *
  * OP_NOOP es útil para cuando no se tiene ningún interés.
  */
@@ -118,7 +118,7 @@ struct selector_key {
     /** el file descriptor en cuestión */
     int         fd;
     /** dato provisto por el usuario */
-    void *      data;
+    void *      data; // se espera que sea un struct socks5 * al parecer, ver ATTACHMENT
 };
 
 /**
