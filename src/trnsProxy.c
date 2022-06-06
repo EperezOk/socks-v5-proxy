@@ -51,7 +51,7 @@ int main(int argc , char *argv[]) {
     int opt = TRUE;
     int master_socket, addrlen, new_socket, activity, i;
     pthread_t name_resolver_thread;
-    int *resolver_ret_value;
+    int *resolver_ret_value = NULL;
 
     addrinfo_params params;
     params.site = "www.google.com";
@@ -111,14 +111,6 @@ int main(int argc , char *argv[]) {
     // set of socket descriptors
     fd_set readfds;
     fd_set writefds;
-
-    if(pthread_join(name_resolver_thread, (void *)&resolver_ret_value) != 0 || *resolver_ret_value != 0){
-        perror("name resolver thread failed");
-        exit(EXIT_FAILURE);
-    }
-
-    puts("Resolved origin server name");
-    free(resolver_ret_value);
 
     while(TRUE) {
         // clear the socket set
@@ -185,6 +177,14 @@ int main(int argc , char *argv[]) {
                         if ((client_socket[i].originFd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) == 0) {
                             perror("origin socket failed");
                             exit(EXIT_FAILURE);
+                        }
+                        // If name has not been resolved yet (no ret value), then wait for thread to finish it
+                        if(resolver_ret_value == NULL){
+                            if(pthread_join(name_resolver_thread, (void *)&resolver_ret_value) != 0 || *resolver_ret_value != 0){
+                                perror("name resolver thread failed");
+                                exit(EXIT_FAILURE);
+                            }
+                            puts("Resolved origin server name");
                         }
                         // connecting to google, if in progress, waiting in select to write
                         if ((connect(client_socket[i].originFd, params.origin_servers->ai_addr, sizeof(struct sockaddr))) == -1) {
@@ -263,8 +263,8 @@ int main(int argc , char *argv[]) {
             }
         }
     }
-      
     freeaddrinfo(params.origin_servers);
+    free(resolver_ret_value);
 
     return 0;
 }
