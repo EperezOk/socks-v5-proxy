@@ -63,7 +63,7 @@ atyp(const uint8_t c, struct request_parser *p) {
             remaining_set(p, 16);
             memset(&(p->request->dest_addr.ipv6), 0,
                                 sizeof(p->request->dest_addr.ipv6));
-            p->request->dest_addr.ipv6.sin_family = AF_INET6;
+            p->request->dest_addr.ipv6.sin6_family = AF_INET6;
             next = request_dstaddr;
             break;
         case socks_req_addrtype_domain:
@@ -94,7 +94,7 @@ dstaddr(const uint8_t c, struct request_parser *p) {
             ((uint8_t *)&(p->request->dest_addr.ipv4.sin_addr))[p->i++] = c;  // ACA NO SE VE EN EL VIDEO CREO Q ES ASI AL FINAL
             break;
         case socks_req_addrtype_ipv6:
-            ((uint8_t *)&(p->request->dest_addr.ipv6.sin_addr))[p->i++] = c;  // ACA NO SE VE EN EL VIDEO CREO Q ES ASI AL FINAL
+            ((uint8_t *)&(p->request->dest_addr.ipv6.sin6_addr))[p->i++] = c;  // ACA NO SE VE EN EL VIDEO CREO Q ES ASI AL FINAL
             break;
         case socks_req_addrtype_domain:
             p->request->dest_addr.fqdn[p->i++] = c;

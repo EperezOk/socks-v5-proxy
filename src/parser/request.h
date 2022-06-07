@@ -54,13 +54,13 @@ enum socks_addr_type {
 union socks_addr {
     char fqdn[0xff];
     struct sockaddr_in ipv4;
-    struct sockaddr_in ipv6;
+    struct sockaddr_in6 ipv6;
 };
 
 struct request {
-    enum socks_req_cmd      cmd;
-    enum socks_addr_type    dest_addr_type;
-    union socks_addr        dest_addr;  //En ipv4 tengo que leer 4 de dst addr y si es ipv6 tengo que leer 6 de dst addr. Y en el de domain tengo otro estado mas para leer esta campo.
+    enum    socks_req_cmd     cmd;
+    enum    socks_addr_type   dest_addr_type;
+    union   socks_addr        dest_addr;  //En ipv4 tengo que leer 4 de dst addr y si es ipv6 tengo que leer 6 de dst addr. Y en el de domain tengo otro estado mas para leer esta campo.
     /** port in network byte order */
     in_port_t               dest_port;
 };
