@@ -23,11 +23,11 @@
 
 struct state_machine {
     /** declaración de cual es el estado inicial */
-    unsigned                      initial;
+    unsigned                      initial; // se inicializa con HELLO_READ en socks5_new(), no usa el enum aca para hacerlo generico a la maquina de estados
     /**
      * declaracion de los estados: deben estar ordenados segun .[].state.
      */
-    const struct state_definition *states;
+    const struct state_definition *states; // array de estados
     /** cantidad de estados */
     unsigned                      max_state;
     /** estado actual */
@@ -59,7 +59,7 @@ struct state_definition {
 };
 
 
-/** inicializa el la máquina */
+/** inicializa la máquina */
 void
 stm_init(struct state_machine *stm);
 
