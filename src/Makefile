@@ -27,7 +27,7 @@ clean:
 
 # TODO: DELETE AFTER TRANSPARENT PROXY IS DELETED
 proxy: trnsProxy.o ./transp-proxy/buffer.o
-	$(COMPILER) $(CFLAGS) $^ -o ../$@.out
+	$(COMPILER) $(CFLAGS) $^ -o ../$@.out -pthread
 
 cleanp:
 	make clean;

@@ -15,6 +15,7 @@
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include <fcntl.h>
 #include "transp-proxy/buffer.h"
+#include <pthread.h>
 
 #define TRUE   1
 #define FALSE  0
@@ -32,19 +33,35 @@ typedef struct client {
     int originFd; // origin server fd
 } client;
 
+typedef struct addrinfo_params {
+    char *site;
+    char *port;
+    struct addrinfo options;
+    struct addrinfo *origin_servers;
+} addrinfo_params;
+
+void* name_resolver (void* args){
+    int *ret_value = (int *)malloc(sizeof(int));
+    addrinfo_params *params = (addrinfo_params*) args;
+    *ret_value = getaddrinfo(params->site, params->port, &(params->options), &(params->origin_servers));
+    return ret_value;
+}
+
 int main(int argc , char *argv[]) {
     int opt = TRUE;
     int master_socket, addrlen, new_socket, activity, i;
+    pthread_t name_resolver_thread;
+    int *resolver_ret_value = NULL;
 
-    // RESOLUCION NOMBRES - TODO: REMOVE FROM HERE
-    struct addrinfo hints;
-    struct addrinfo *remote_servers;
+    addrinfo_params params;
+    params.site = "www.google.com";
+    params.port = "80";
+    memset(&(params.options), 0, sizeof(struct addrinfo));
+    // TODO: Change to IPv6 (AF_INET6) when using sockets for ipv6
+    params.options.ai_family = AF_INET;
 
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-
-    if((getaddrinfo("www.google.com", "80", &hints, &remote_servers)) != 0){
-        perror("getaddrinfo failed");
+    if(pthread_create(&name_resolver_thread, NULL, name_resolver, &params) != 0){
+        perror("thread create failed");
         exit(EXIT_FAILURE);
     }
 
@@ -161,8 +178,16 @@ int main(int argc , char *argv[]) {
                             perror("origin socket failed");
                             exit(EXIT_FAILURE);
                         }
+                        // If name has not been resolved yet (no ret value), then wait for thread to finish it
+                        if(resolver_ret_value == NULL){
+                            if(pthread_join(name_resolver_thread, (void *)&resolver_ret_value) != 0 || *resolver_ret_value != 0){
+                                perror("name resolver thread failed");
+                                exit(EXIT_FAILURE);
+                            }
+                            puts("Resolved origin server name");
+                        }
                         // connecting to google, if in progress, waiting in select to write
-                        if ((connect(client_socket[i].originFd, remote_servers->ai_addr, sizeof(struct sockaddr))) == -1) {
+                        if ((connect(client_socket[i].originFd, params.origin_servers->ai_addr, sizeof(struct sockaddr))) == -1) {
                             if (errno != EINPROGRESS && errno != EAGAIN) {
                                 perror("origin server connect failed");
                                 exit(EXIT_FAILURE);
@@ -238,8 +263,8 @@ int main(int argc , char *argv[]) {
             }
         }
     }
-      
-    freeaddrinfo(remote_servers);
+    freeaddrinfo(params.origin_servers);
+    free(resolver_ret_value);
 
     return 0;
 }
