@@ -1,10 +1,9 @@
 /**
  * request.c -- parser del request de SOCKS5
  */
-#include <string.h>> //memset
-#include <arpa/inet.h>
+#include <string.h> //memset
 
-#include "request.h"
+#include "../include/request.h"
 
 static void
 remaining_set(struct request_parser *p, const int n) {
@@ -172,7 +171,7 @@ request_parser_feed (struct request_parser *p, const uint8_t c) {
 
 extern bool
 request_is_done(const enum request_state st, bool *errored) {
-
+    return false; // TODO
 }
 
 /*TODO FALTA UN PAR DE METODOS QUE NO SE VEN EN EL VIDEO*/

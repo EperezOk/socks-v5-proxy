@@ -175,24 +175,6 @@ struct connecting {
     enum socks_response_status *status;
 };
 
-// FIXME: esta struct no va aca, va en el parser de request
-struct request {
-
-    // socks_req_cmd_connect, 
-    // socks_req_cmd_bind
-    // socks_req_cmd_associate
-    enum cmd;
-
-    // socks_req_addrtype_ipv4,
-    // socks_req_addrtype_ipv6,
-    // socks_req_addrtype_domain
-    enum dest_addr_type;
-
-    ??     dest_addr; // struct con .ipv4.sin_port, maybe struct sockaddr_storage?
-
-    ??     dest_port; // mismo tipo que dest_addr.ipv4.sin_port
-};
-
 /** usado por COPY */
 struct copy {
     /** el file descriptor propio (client.copy tiene client_fd y lo mismo orig) */
@@ -540,7 +522,7 @@ request_read(struct selector_key *key) {
     buffer *b            = d->rb;
     unsigned ret         = REQUEST_READ;
     bool error           = false;
-    uint8_t ptr;
+    uint8_t *ptr;
     size_t count;
     ssize_t n;
 
@@ -872,10 +854,12 @@ copy_ptr(struct selector_key *key) {
     // agarramos cualquiera de los extremos del copy
     struct copy *d = &ATTACHMENT(key)->client.copy;
 
-    if (*d->fd == key->fd)
+    if (*d->fd == key->fd) {
         // ok, agarramos el correcto
-    else
+    }
+    else {
         d = d->other; // agarramos el equivocado, retornamos el otro
+    }
     return d;
 }
 

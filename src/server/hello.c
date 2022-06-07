@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "hello.h"
+#include "../include/hello.h"
 
 extern void
 hello_parser_init(struct hello_parser *p) {
