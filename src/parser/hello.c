@@ -34,7 +34,7 @@ hello_parser_feed(struct hello_parser *p, const uint8_t b) {
         break;
 
     case hello_methods:
-        if(NULL != p->on_authentication_method) {
+        if(NULL != p->on_authentication_method) {   // Aca se usa la funcion que pasamos en socks5.c como puntero para ver si es una funcion que acepta el server
             p->on_authentication_method(p, b);
         }
         p->remaining--;

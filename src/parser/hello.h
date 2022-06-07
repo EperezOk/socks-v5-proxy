@@ -60,7 +60,7 @@ enum hello_state hello_parser_feed (struct hello_parser *p, uint8_t b);
  * el parseo se encuentra completo o se requieren mas bytes.
  * 
  * param errored parametro de salida. si es diferente de NULL se deja dicho valor
- * si el parsing se devio a una condicion de error
+ * si el parsing se debio a una condicion de error
  */
 enum hello_state
 hello_consume(buffer *b, struct hello_parser *p, bool *errored);
@@ -85,7 +85,7 @@ hello_error(const struct hello_parser *p);
 /* Libera recursos internos del parser */
 void hello_parser_close(struct hello_parser *p);
 
-static const uint8_t SOCKS_HELLO_NOAUTHENTICATION_REQUIRED = 0x00;
+static const uint8_t SOCKS_HELLO_NOAUTHENTICATION_REQUIRED = 0x00;	/* Faltaria definir un AUTHENTICATION REQUIRED que seria 0x01 */
 /*
  * If the selected METHOD is X'FF', none of the methods listed by the
  * client are acceptable, and the client MUST close the connection.
