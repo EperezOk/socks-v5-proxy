@@ -479,6 +479,7 @@ handle_iteration(fd_selector s) {
     }
 }
 
+// lanza el handler de todas las tareas bloqueantes que ya se hayan resuelto
 static void
 handle_block_notifications(fd_selector s) {
     struct selector_key key = {
@@ -504,8 +505,7 @@ handle_block_notifications(fd_selector s) {
 
 
 selector_status
-selector_notify_block(fd_selector  s,
-                 const int    fd) {
+selector_notify_block(fd_selector s, const int fd) {
     selector_status ret = SELECTOR_SUCCESS;
 
     // TODO(juan): usar un pool
