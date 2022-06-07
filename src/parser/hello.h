@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "buffer.h"
+#include "../include/buffer.h"
 
 static const uint8_t METHOD_NO_AUTHENTICATION_REQUIRED = 0x00;
 static const uint8_t METHOD_NO_ACCEPTABLE_METHODS = 0x00;
@@ -100,6 +100,6 @@ static const uint8_t SOCKS_HELLO_NO_ACCEPTABLE_METHODS = 0xFF;
  * espacio sufuciente.
  */ 
 int 
-hello_marsharll(buffer *b, const uint8_t method);
+hello_marshall(buffer *b, const uint8_t method);
 
 #endif

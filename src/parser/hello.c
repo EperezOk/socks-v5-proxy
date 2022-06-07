@@ -107,7 +107,7 @@ hello_consume(buffer *b, struct hello_parser *p, bool *errored) {
 }
 
 extern int
-hello_marsharll(buffer *b, const uint8_t method) {
+hello_marshall(buffer *b, const uint8_t method) {
     size_t n;
     uint8_t *buff = buffer_write_ptr(b, &n);
     if(n < 2) {
