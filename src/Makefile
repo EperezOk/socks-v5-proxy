@@ -2,35 +2,41 @@ include ./include/Makefile.inc
 
 SOURCES_CLIENT := $(wildcard ./client/*.c)
 SOURCES_SERVER := $(wildcard ./server/*.c)
-
-OBJECTS_CLIENT := $(OBJECT_CLIENT:.c=.o) $(SOURCES_CLIENT:.c=.o)
-OBJECTS_SERVER := $(OBJECT_SERVER:.c=.o) $(SOURCES_SERVER:.c=.o)
-OBJECTS = $(OBJECTS_SERVER) $(OBJECTS_CLIENT)
+SOURCES_COMMON := $(wildcard ./utils/*.c)
 
 TARGETS := $(wildcard ../*.out)
 TARGET_CLIENT := client
 TARGET_SERVER := server
 
+OBJECTS_CLIENT := $(TARGET_CLIENT).o $(SOURCES_CLIENT:.c=.o)
+OBJECTS_SERVER := $(TARGET_SERVER).o $(SOURCES_SERVER:.c=.o)
+OBJECTS_COMMON := $(SOURCES_COMMON:.c=.o)
+OBJECTS = $(OBJECTS_SERVER) $(OBJECTS_CLIENT) $(OBJECTS_COMMON)
+
 all: $(TARGET_SERVER) $(TARGET_CLIENT)
 
-$(TARGET_CLIENT): $(OBJECTS_CLIENT)
-	$(COMPILER) $(CFLAGS) $^ -o ../$@.out
+$(TARGET_CLIENT): $(OBJECTS_CLIENT) $(OBJECTS_COMMON)
+	$(CC) $(CFLAGS) $^ -o ../$@.out
 
-$(TARGET_SERVER): $(OBJECTS_SERVER)
-	$(COMPILER) $(CFLAGS) $^ -o ../$@.out
+$(TARGET_SERVER): $(OBJECTS_SERVER) $(OBJECTS_COMMON)
+	$(CC) $(CFLAGS) $^ -o ../$@.out
 
 %.o: %.c
-	$(COMPILER) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(OBJECTS) $(TARGETS)
 
-# TODO: DELETE AFTER TRANSPARENT PROXY IS DELETED
-proxy: trnsProxy.o ./transp-proxy/buffer.o
-	$(COMPILER) $(CFLAGS) $^ -o ../$@.out -pthread
+.PHONY: all clean $(TARGET_CLIENT) $(TARGET_SERVER)
+
+# TODO: DELETE FROM HERE ONCE TRANSPARENT PROXY IS DELETED
+SOURCES_PROXY := $(wildcard ./transp-proxy/*.c)
+TARGET_PROXY := proxy
+OBJECTS_PROXY := $(TARGET_PROXY).o $(SOURCES_PROXY:.c=.o)
+
+$(TARGET_PROXY): $(OBJECTS_PROXY)
+	$(CC) $(CFLAGS) $^ -o ../$@.out
 
 cleanp:
 	make clean;
-	rm -f ./trnsProxy.o ../proxy.out ./transp-proxy/buffer.o;
-
-.PHONY: all clean $(TARGET_CLIENT) $(TARGET_SERVER)
+	rm -rf $(OBJECTS_PROXY) $(TARGET_PROXY).out;
