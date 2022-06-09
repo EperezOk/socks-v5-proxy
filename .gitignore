@@ -2,6 +2,7 @@
 *
 !*/
 !*.*
+!Makefile
 
 .bash_history
 .config

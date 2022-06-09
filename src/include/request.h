@@ -6,7 +6,7 @@
 
 #include <netinet/in.h>
 
-#include "../include/buffer.h"
+#include "buffer.h"
 
 /** The SOCKS request is formed as follows:
  * 
