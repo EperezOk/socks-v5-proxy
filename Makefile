@@ -1,25 +1,33 @@
 include ./src/include/Makefile.inc
 
-SOURCES_FOLDER = src
+SOURCES_CLIENT := $(wildcard ./src/client/*.c)
+SOURCES_SERVER := $(wildcard ./src/server/*.c)
+SOURCES_COMMON := $(wildcard ./src/utils/*.c)
 
-all:
-	cd $(SOURCES_FOLDER); make $@
+OBJECTS_CLIENT := ./src/$(TARGET_CLIENT).o $(SOURCES_CLIENT:.c=.o)
+OBJECTS_SERVER := ./src/server.o $(SOURCES_SERVER:.c=.o)
+OBJECTS_COMMON := $(SOURCES_COMMON:.c=.o)
+OBJECTS = $(OBJECTS_SERVER) $(OBJECTS_CLIENT) $(OBJECTS_COMMON)
 
-$(TARGET_CLIENT):
-	cd $(SOURCES_FOLDER); make $@
+all: $(TARGET_SERVER) $(TARGET_CLIENT)
 
-$(TARGET_SERVER):
-	cd $(SOURCES_FOLDER); make $@
+$(TARGET_CLIENT): $(OBJECTS_CLIENT) $(OBJECTS_COMMON)
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(TARGET_SERVER): $(OBJECTS_SERVER) $(OBJECTS_COMMON)
+	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
-	cd $(SOURCES_FOLDER); make $@
-	rm -rf $(TARGET_CLIENT) $(TARGET_SERVER)
+	rm -rf $(OBJECTS) $(TARGET_SERVER) $(TARGET_CLIENT)
 
 .PHONY: all clean
 
-# TODO: delete these
-proxy:
-	cd $(SOURCES_FOLDER); make $@
+# TODO: DELETE FROM HERE ONCE TRANSPARENT PROXY IS DELETED
+SOURCES_PROXY := $(wildcard ./transp-proxy/*.c)
+OBJECTS_PROXY := trnsProxy.o $(SOURCES_PROXY:.c=.o)
+
+proxy: $(OBJECTS_PROXY)
+	$(CC) $(CFLAGS) $^ -o ../$@
 
 cleanp:
-	cd $(SOURCES_FOLDER); make $@
+	rm -rf $(OBJECTS_PROXY) ../proxy;
