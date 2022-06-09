@@ -208,8 +208,8 @@ int main(int argc , char *argv[]) {
             
             buffer *br = &client_socket[i].readBuffController;
             buffer *bw = &client_socket[i].writeBuffController;
-            size_t wbytes;
-            size_t rbytes;
+            ssize_t wbytes;
+            ssize_t rbytes;
               
             if (FD_ISSET(sd, &readfds)) {
                 wbytes = bufferFreeSpace(br);

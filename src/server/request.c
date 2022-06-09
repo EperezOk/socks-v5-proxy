@@ -16,8 +16,6 @@ remaining_is_done(struct request_parser *p) {
     return p->i >= p->n;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-
 static enum request_state
 version(const uint8_t c, struct request_parser *p) {
     enum request_state next;
@@ -36,7 +34,6 @@ version(const uint8_t c, struct request_parser *p) {
 static enum request_state
 cmd(const uint8_t c, struct request_parser *p) {
     p->request->cmd = c;
-
     return request_rsv;
 }
 
@@ -80,7 +77,6 @@ static enum request_state
 dstaddr_fqdn(const uint8_t c, struct request_parser *p) {
     remaining_set(p, c);
     p->request->dest_addr.fqdn[p->n - 1] = 0; //seteamos el 0 final del nombre para no tener que hacerlo despues
-
     return request_dstaddr;
 }
 
@@ -123,14 +119,13 @@ dstport(const uint8_t c, struct request_parser * p) {
 }
 
 extern void
-request_parser_init (struct request_parser *p) {
+request_parser_init(struct request_parser *p) {
     p->state = request_version;
     memset(p->request, 0, sizeof(*(p->request)));
 }
 
-
 extern enum request_state
-request_parser_feed (struct request_parser *p, const uint8_t c) {
+request_parser_feed(struct request_parser *p, const uint8_t c) {
     enum request_state next;
 
     switch(p->state) {
@@ -171,7 +166,83 @@ request_parser_feed (struct request_parser *p, const uint8_t c) {
 
 extern bool
 request_is_done(const enum request_state st, bool *errored) {
-    return false; // TODO
+    if (st >= request_error && errored != 0)
+        *errored = true;
+    return st >= request_done;
 }
 
-/*TODO FALTA UN PAR DE METODOS QUE NO SE VEN EN EL VIDEO*/
+extern enum request_state
+request_consume(buffer *b, struct request_parser *p, bool *errored) {
+    enum request_state st = p->state;
+
+    while (buffer_can_read(b)) {
+        const uint8_t c = buffer_read(b);
+        st = request_parser_feed(p, c); // cargamos 1 solo byte
+        if (request_is_done(st, errored))
+            break;
+    }
+    return st;
+}
+
+// extern lo pone visible para cualquier parte del codigo, para las funciones se pone de forma implicita asi que es redundante
+extern void
+request_close(struct request_parser *p) {
+    // nada que hacer
+}
+
+extern int
+request_marshall(buffer *b, const enum socks_response_status status) {
+    size_t n;
+    uint8_t *buff = buffer_write_ptr(b, &n);
+
+    if (n < 10)
+        return -1;
+
+    buff[0] = 0x05;
+    buff[1] = status;
+    buff[2] = 0x00;
+    // TODO: extender a IPv6 aca?
+    buff[3] = socks_req_addrtype_ipv4;
+    buff[4] = 0x00;
+    buff[5] = 0x00;
+    buff[6] = 0x00;
+    buff[7] = 0x00;
+    buff[8] = 0x00;
+    buff[9] = 0x00;
+
+    buffer_write_adv(b, 10);
+    return 10;
+}
+
+// Unused in NIO version
+/*
+cmd_resolve(struct request* request, struct sockaddr **originaddr, socklen_t *originlen, int *domain) {
+    // ....................
+}
+*/
+
+#include <errno.h>
+
+enum socks_response_status
+errno_to_socks(const int e) {
+    enum socks_response_status ret = status_general_SOCKS_server_failure;
+    switch (e) {
+        case 0:
+        ret = status_succeeded;
+        break;
+        case ECONNREFUSED:
+        ret = status_connection_refused;
+        break;
+        case EHOSTUNREACH:
+        ret = status_host_unreachable;
+        break;
+        case ENETUNREACH:
+        ret = status_network_unreachable;
+        break;
+        case ETIMEDOUT:
+        ret = status_ttl_expired;
+        break;
+    }
+
+    return ret;
+}

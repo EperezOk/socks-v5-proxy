@@ -229,6 +229,7 @@ struct socks5 {
     } orig;
 
     /** buffers para ser usados read_buffer, write_buffer */
+    // Los mismos se van reusando para todos los estados (van quedando limpios luego de cada transicion), y deberian tener al menos 10 bytes de tamaño para poder almacenar una request_marshall() completa.
     uint8_t raw_buff_a[1024], raw_buff_b[1024];
     buffer read_buffer, write_buffer;
 
@@ -331,7 +332,7 @@ static void socksv5_read   (struct selector_key *key);
 static void socksv5_write  (struct selector_key *key);
 static void socksv5_block  (struct selector_key *key);
 static void socksv5_close  (struct selector_key *key);
-// Los handlers particulares de cada estado se definen en los hooks del estado particular (struct state_definition)
+// Los handlers particulares de cada estado se definen en los hooks del estado particular (struct state_definition), estos son los generales para los socket activos de los clientes
 static const struct fd_handler socks5_handler = {
     .handle_read   = socksv5_read,
     .handle_write  = socksv5_write,
@@ -756,11 +757,13 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
             *d->status = status_succeeded;
             *d->origin_fd = key->fd;
         } else {
+            // TODO
             // llamar nuevamente a connect pero avanzando el puntero de getaddrinfo a la siguiente rta, y retornar REQUEST_CONNECTING? Si no hay mas opciones en la lista, setear el status de error como esta hecho y seguir el flujo de esta funcion
             *d->status = errno_to_socks(error);
         }
     }
 
+    // TODO: se podra mover el request marshall directamente al request_write() para poder ir ahi desde otros estados en caso de error (por ej desde REQUEST_RESOLV)
     if (-1 == request_marshall(d->wb, *d->status)) {
         *d->status = status_general_SOCKS_server_failure;
         abort(); // el buffer tiene que ser mas grande en la variable
@@ -807,7 +810,8 @@ request_write(struct selector_key *key) {
         }
     }
 
-    log_request(d->status, (const struct sockaddr *) &ATTACHMENT(key)->client_addr, (const struct sockaddr *) &ATTACHMENT(key)->origin_addr);
+    // TODO: implement
+    // log_request(d->status, (const struct sockaddr *) &ATTACHMENT(key)->client_addr, (const struct sockaddr *) &ATTACHMENT(key)->origin_addr);
 
     return ret;
 }

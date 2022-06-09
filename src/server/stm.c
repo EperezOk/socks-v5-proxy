@@ -23,6 +23,7 @@ stm_init(struct state_machine *stm) {
     }
 }
 
+// inicializa el estado de una conexion particular si no lo estaba ya
 inline static void
 handle_first(struct state_machine *stm, struct selector_key *key) {
     if(stm->current == NULL) {
@@ -39,12 +40,17 @@ void jump(struct state_machine *stm, unsigned next, struct selector_key *key) {
     if(next > stm->max_state) {
         abort();
     }
+    // checkeamos si se esta produciendo un cambio de estado realmente, porque tambien podriamos quedarnos en el mismo y en ese caso no deberiamos ejecutar los hooks
     if(stm->current != stm->states + next) {
+        // llama al on_departure() del estado saliente
         if(stm->current != NULL && stm->current->on_departure != NULL) {
             stm->current->on_departure(stm->current->state, key);
         }
+
+        // cambio de estado
         stm->current = stm->states + next;
 
+        // llama al on_arrival() del estado entrante
         if(NULL != stm->current->on_arrival) {
             stm->current->on_arrival(stm->current->state, key);
         }

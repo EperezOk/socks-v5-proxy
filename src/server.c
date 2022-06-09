@@ -128,7 +128,7 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    // handlers para cada tipo de accion (read, write y close) sobre los fds del SELECT
+    // handlers para cada tipo de accion (read, write y close) sobre el socket pasivo
     const struct fd_handler socksv5 = {
         .handle_read       = socksv5_passive_accept,
         .handle_write      = NULL,
