@@ -635,7 +635,7 @@ request_resolv_blocking(void *data) {
 
     // esta info la procesa la funcion de abajo
     // TODO: handle getaddrinfo error poniendo por ej s->origin_resolution = 0 ? Lo que haga deberia hacer que request_resolv_done() redirija directo a REQUEST_WRITE y no a REQUEST_CONNECTING
-    getaddrinfo(s->client.request.request.dest_addr.fqdn, buff, &hints, &s->origin_resolution);
+    getaddrinfo(s->client.request.request.dest_addr.fqdn, buff, &hints, &s->origin_resolution); // esto pareceria funcionar tanto para IPv4 como para IPv6 en todo el flujo
 
     selector_notify_block(key->s, key->fd);
 
@@ -810,7 +810,7 @@ request_write(struct selector_key *key) {
         }
     }
 
-    // TODO: implement
+    // TODO: implementar de acuerdo a lo pedido en el man que nos dieron
     // log_request(d->status, (const struct sockaddr *) &ATTACHMENT(key)->client_addr, (const struct sockaddr *) &ATTACHMENT(key)->origin_addr);
 
     return ret;

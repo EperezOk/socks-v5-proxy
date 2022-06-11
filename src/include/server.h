@@ -1,2 +1,0 @@
-#define DEFAULT_PORT    1080
-#define MAX_CONNECTIONS 512
