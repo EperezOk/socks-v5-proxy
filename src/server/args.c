@@ -111,9 +111,11 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                 break;
             case 'l':
                 args->socks_addr = optarg;
+                args->is_default_socks_addr = true;
                 break;
             case 'L':
                 args->mng_addr = optarg;
+                args->is_default_mng_addr = true;
                 break;
             case 'N':
                 args->disectors_enabled = false;

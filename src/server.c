@@ -94,7 +94,7 @@ main(const int argc, char **argv) {
         goto finally;
     }
 
-    const int server_v6 = bind_ipv6_socket(in6addr_any, args.socks_port);
+    const int server_v6 = bind_ipv6_socket(address_v6, args.socks_port);
     if (server_v6 < 0) {
         err_msg = "unable to create IPv6 socket";
         goto finally;

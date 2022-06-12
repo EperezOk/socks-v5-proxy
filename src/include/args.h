@@ -28,9 +28,11 @@ struct doh {
 
 struct socks5args {
     char           *socks_addr;
+    bool            is_default_socks_addr;
     unsigned short  socks_port;
 
     char *          mng_addr;
+    bool            is_default_mng_addr;
     unsigned short  mng_port;
 
     bool            disectors_enabled;
