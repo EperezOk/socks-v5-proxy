@@ -483,7 +483,7 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
             if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
                 ret = REQUEST_READ;
             } else {
-                // tambien podia haber un mensaje de error en el buffer, populado por el hello_marshall() creo
+                // tambien podia haber un mensaje de error en el buffer, populado por el hello_marshall()
                 ret = ERROR;
             }
         }
@@ -554,10 +554,8 @@ request_process(struct selector_key *key, struct request_st *d) {
 
     switch (d->request.cmd) {
         case socks_req_cmd_connect:
-            // Coda: esto mejoraria de haber usado sockaddr_storage en el request
             switch (d->request.dest_addr_type) {
                 case socks_req_addrtype_ipv4: {
-                    // Se podria setear todo esto directamente cuando se cargan las cosas en d->request ?
                     ATTACHMENT(key)->origin_domain = AF_INET;
                     d->request.dest_addr.ipv4.sin_port = d->request.dest_port;
                     ATTACHMENT(key)->origin_addr_len = sizeof(d->request.dest_addr.ipv4);
@@ -633,9 +631,10 @@ request_resolv_blocking(void *data) {
     char buff[7];
     snprintf(buff, sizeof(buff), "%d", ntohs(s->client.request.request.dest_port));
 
-    // esta info la procesa la funcion de abajo
-    // TODO: handle getaddrinfo error poniendo por ej s->origin_resolution = 0 ? Lo que haga deberia hacer que request_resolv_done() redirija directo a REQUEST_WRITE y no a REQUEST_CONNECTING
-    getaddrinfo(s->client.request.request.dest_addr.fqdn, buff, &hints, &s->origin_resolution);
+    if (getaddrinfo(s->client.request.request.dest_addr.fqdn, buff, &hints, &s->origin_resolution) != 0) {
+        s->client.request.status = status_general_SOCKS_server_failure;
+        s->origin_resolution = 0;
+    }
 
     selector_notify_block(key->s, key->fd);
 
@@ -650,8 +649,9 @@ request_resolv_done(struct selector_key *key) {
     struct socks5 *s     = ATTACHMENT(key);
 
     if (s->origin_resolution == 0) {
-        d->status = status_general_SOCKS_server_failure;
-        // return REQUEST_WRITE ??? Deberia igual tambien poner un mensaje en el buffer (quizas con request_marshall) y setear el socket en OP_WRITE primero antes de cambiar a REQUEST_WRITE
+        d->status = status_host_unreachable;
+        selector_status st = selector_set_interest_key(key, OP_WRITE);
+        return SELECTOR_SUCCESS == st ? REQUEST_WRITE : ERROR;
     } else {
         s->origin_resolution_current = s->origin_resolution;
         s->origin_domain = s->origin_resolution->ai_family;
@@ -663,15 +663,22 @@ request_resolv_done(struct selector_key *key) {
 }
 
 // debe retornar un state
+// OJO: key puede ser tanto de un cliente como de un origin (esto ultimo si se re-llama esta funcion desde el request_connecting())
 static unsigned
 request_connect(struct selector_key *key, struct request_st *d) {
     bool error                        = false;
-    enum socks_response_status status = d->status;
     int *fd                           = d->origin_fd;
+
+    // si ya habiamos asignado una vez el fd y estamos tratando de conectarnos con una IP diferente, cerramos el viejo y lo creamos devuelta
+    if (ATTACHMENT(key)->stm.current->state == REQUEST_CONNECTING) {
+        selector_unregister_fd(key->s, *fd);
+        close(*fd);
+    }
 
     *fd = socket(ATTACHMENT(key)->origin_domain, SOCK_STREAM, 0);
 
     if (*fd == -1) {
+        d->status = status_general_SOCKS_server_failure;
         error = true;
         goto finally;
     }
@@ -683,7 +690,7 @@ request_connect(struct selector_key *key, struct request_st *d) {
         if (errno == EINPROGRESS) {
             // es lo esperable, hay que aguardar la conexion
             // dejamos de escuchar del socket del cliente
-            selector_status st = selector_set_interest_key(key, OP_NOOP);
+            selector_status st = selector_set_interest(key->s, ATTACHMENT(key)->client_fd, OP_NOOP);
             if (SELECTOR_SUCCESS != st) {
                 error = true;
                 goto finally;
@@ -698,7 +705,7 @@ request_connect(struct selector_key *key, struct request_st *d) {
             }
             ATTACHMENT(key)->references += 1;
         } else {
-            status = errno_to_socks(errno);
+            d->status = errno_to_socks(errno);
             error = true;
             goto finally;
         }
@@ -708,18 +715,15 @@ request_connect(struct selector_key *key, struct request_st *d) {
     }
 
 finally:
-    if (error && *fd != -1) {
-        close(*fd);
-        *fd = -1;
+    if (error) {
+        if (*fd != -1) {
+            close(*fd);
+            *fd = -1;
+        }
+        selector_status st = selector_set_interest(key->s, ATTACHMENT(key)->client_fd, OP_WRITE);
+        return SELECTOR_SUCCESS == st ? REQUEST_WRITE : ERROR;
     }
 
-    d->status = status;
-
-    // TODO: ajustar el retorno de esta funcion?
-    // si hubo error y retorno REQ_WRITE, deberia creo setear un mensaje de error (con request_marshall quizas) en el buffer de escritura y tambien registrar para escritura el fd del cliente.
-    // en caso de que haya salido todo bien, deberia retornar REQUEST_CONNECTING.
-    
-    // Coda simplemente retorna REQUEST_CONNECTING y el error pasa a request_connecting, donde seguramente getsockopt() va a fallar
     return REQUEST_CONNECTING;
 }
 
@@ -774,11 +778,6 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
         s->origin_resolution_current = 0;
     }
 
-    // TODO: se podra mover el request marshall directamente al request_write() para poder ir ahi desde otros estados en caso de error (por ej desde REQUEST_RESOLV)
-    if (-1 == request_marshall(d->wb, *d->status)) {
-        *d->status = status_general_SOCKS_server_failure;
-        abort(); // el buffer tiene que ser mas grande en la variable
-    }
     selector_status ss = 0;
     ss |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
     ss |= selector_set_interest_key(key, OP_NOOP);
@@ -800,6 +799,11 @@ request_write(struct selector_key *key) {
     size_t count;
     ssize_t n;
 
+    if (-1 == request_marshall(b, d->status)) {
+        d->status = status_general_SOCKS_server_failure;
+        abort(); // el buffer tiene que ser mas grande en la variable
+    }
+
     ptr = buffer_read_ptr(b, &count);
     // si estamos aca es porque el select nos desperto y tiene que haber espacio para mandar al menos 1 byte (no puede bloquear)
     n = send(key->fd, ptr, count, MSG_NOSIGNAL);
@@ -813,7 +817,7 @@ request_write(struct selector_key *key) {
                 selector_set_interest(key->s, *d->client_fd, OP_READ);
                 selector_set_interest(key->s, *d->origin_fd, OP_READ);
             } else {
-                ret = DONE; // FIXME: hubo algun tipo de error, deberia ser ERROR?
+                ret = ERROR;
                 selector_set_interest(key->s, *d->client_fd, OP_NOOP);
                 if (-1 != *d->origin_fd)
                     selector_set_interest(key->s, *d->origin_fd, OP_NOOP);
