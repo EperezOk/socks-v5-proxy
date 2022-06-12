@@ -26,7 +26,9 @@
 // #include "include/socks5.h"
 #include "include/selector.h"
 #include "include/socks5nio.h"
-#include "include/server.h"
+
+#define DEFAULT_PORT    1080
+#define MAX_CONNECTIONS 512
 
 static bool done = false;
 
@@ -35,6 +37,9 @@ sigterm_handler(const int signal) {
     printf("signal %d, cleaning up and exiting\n",signal);
     done = true;
 }
+
+static int bind_ipv4_socket(struct in_addr bind_address, unsigned port);
+static int bind_ipv6_socket(struct in6_addr bind_address, unsigned port);
 
 int
 main(const int argc, const char **argv) {
@@ -66,46 +71,30 @@ main(const int argc, const char **argv) {
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
 
-    // estructura para armar el socket pasivo (solo IPv4)
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY); // Aceptamos cualquier ip de la red local
-    addr.sin_port        = htons(port); // htons translates a short integer from host byte order to network byte order. 
-
-    // creacion del socket pasivo
-    const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    // TODO: aca deberiamos usar la direccion recibamos en la opcion de linea de comandos "-l"
+    struct in_addr address = { .s_addr = htonl(INADDR_ANY) };
+    const int server = bind_ipv4_socket(address, port);
     if (server < 0) {
-        err_msg = "unable to create socket";
+        err_msg = "unable to create IPv4 socket";
         goto finally;
     }
+    fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", port);
 
-    fprintf(stdout, "Listening on TCP port %d\n", port);
-
-    int sock_optval[] = { 1 }; //  valor de SO_REUSEADDR
-    socklen_t sock_optlen = sizeof(int);
-    // man 7 ip. no importa reportar nada si falla.
-    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, (const void*)sock_optval, sock_optlen);
-  
-    // Bind to ALL the address 
-    if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {  
-        err_msg = "unable to bind socket";
+    // TODO: aca deberiamos usar la direccion recibamos en la opcion de linea de comandos "-l"
+    const int server_v6 = bind_ipv6_socket(in6addr_any, port);
+    if (server_v6 < 0) {
+        err_msg = "unable to create IPv6 socket";
         goto finally;
     }
-
-    //server socket pasivo para escuchar
-    if (listen(server, 5) < 0) {
-        err_msg = "unable to listen";
-        goto finally;
-    }
+    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", port);
 
     // registrar sigterm es útil para terminar el programa normalmente.
     // esto ayuda mucho en herramientas como valgrind.
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT,  sigterm_handler);
 
-    // obtenemos los flags del socket
-    if(selector_fd_set_nio(server) == -1) {
+    // seteamos los sockets pasivos como no bloqueantes
+    if(selector_fd_set_nio(server) == -1 || selector_fd_set_nio(server_v6) == -1) {
         err_msg = "getting server socket flags";
         goto finally;
     }
@@ -137,7 +126,13 @@ main(const int argc, const char **argv) {
 
     ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
     if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering fd";
+        err_msg = "registering IPv4 fd";
+        goto finally;
+    }
+
+    ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
+    if(ss != SELECTOR_SUCCESS) {
+        err_msg = "registering IPv6 fd";
         goto finally;
     }
 
@@ -174,11 +169,78 @@ finally:
     }
     selector_close();
 
-    // socksv5_pool_destroy(); // TODO
+    socksv5_pool_destroy();
 
-    if(server >= 0) {
+    if (server >= 0)
         close(server);
-    }
+
+    if(server_v6 >= 0)
+        close(server_v6);
 
     return ret;
+}
+
+static int
+create_socket(sa_family_t family) {
+    const int s = socket(family, SOCK_STREAM, IPPROTO_TCP);
+    if (s < 0) {
+        fprintf(stderr, "unable to create socket\n");
+        return -1;
+    }
+
+    int sock_optval[] = { 1 }; //  valor de SO_REUSEADDR
+    socklen_t sock_optlen = sizeof(int);
+    // man 7 ip. no importa reportar nada si falla.
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const void*)sock_optval, sock_optlen);
+    return s;
+}
+
+static int
+bind_socket(int server, struct sockaddr *address, socklen_t address_len) {
+    if (bind(server, address, address_len) < 0) {
+        fprintf(stderr, "unable to bind socket\n");
+        return -1;
+    }
+
+    if (listen(server, 5) < 0) {
+        fprintf(stderr, "unable to listen on socket\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+/** creates and binds an IPv4 socket */
+static int
+bind_ipv4_socket(struct in_addr bind_address, unsigned port) {
+    const int server = create_socket(AF_INET);
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr        = bind_address;
+    addr.sin_port        = htons(port); // htons translates a short integer from host byte order to network byte order.
+
+    if (bind_socket(server, (struct sockaddr*) &addr, sizeof(addr)) == -1)
+        return -1;
+
+    return server;
+}
+
+/** creates and binds an IPv6 socket */
+static int
+bind_ipv6_socket(struct in6_addr bind_address, unsigned port) {
+    const int server = create_socket(AF_INET6);
+    setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int){1}, sizeof(int)); // man ipv6, si falla fallara el bind
+
+    struct sockaddr_in6 addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin6_family      = AF_INET6;
+    addr.sin6_addr        = bind_address;
+    addr.sin6_port        = htons(port); // htons translates a short integer from host byte order to network byte order.
+
+    if (bind_socket(server, (struct sockaddr*) &addr, sizeof(addr)) == -1)
+        return -1;
+
+    return server;
 }

@@ -825,7 +825,7 @@ request_write(struct selector_key *key) {
         }
     }
 
-    // TODO: implement
+    // TODO: implementar de acuerdo a lo pedido en el man que nos dieron
     // log_request(d->status, (const struct sockaddr *) &ATTACHMENT(key)->client_addr, (const struct sockaddr *) &ATTACHMENT(key)->origin_addr);
 
     return ret;
