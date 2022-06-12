@@ -14,6 +14,7 @@
 
 #include "../include/hello.h"
 #include "../include/request.h"
+#include "../include/auth.h"
 #include "../include/buffer.h"
 
 #include "../include/stm.h"
@@ -51,8 +52,8 @@ enum socks_v5state {
     HELLO_WRITE,
 
     // TODO: incorporate these
-    // AUTH_READ,
-    // AUTH_WRITE,
+    AUTH_READ,
+    AUTH_WRITE,
 
     /**
      * recibe el request del cliente, e inicia su proceso
@@ -150,11 +151,6 @@ struct request_st {
     struct request_parser       parser;
 
     /** el resumen de la respuesta a enviar */
-    // status_general_SOCKS_server_failure, 
-    // status_address_type_not_supported,
-    // status_command_not_supported,
-    // status_succeeded,
-    // errno_to_socks(error),
     enum socks_response_status  status;
 
     // referencian a los campos de struct socks5
@@ -166,9 +162,24 @@ struct request_st {
     int                         *origin_fd;
 };
 
+/** usado por AUTH_READ y AUTH_WRITE */
+struct auth_st {
+    /** buffer utilizado para I/O */
+    buffer                     *rb, *wb;
+
+    /** parser */
+    struct auth                auth;
+    struct auth_parser         parser;
+
+    /** el resumen de la respuesta a enviar */
+    enum auth_response_status  status;
+
+    /** referencia al campo de struct socks5 */
+    char                       *uname;
+};
+
 /** usado por REQUEST_CONNECTING */
 struct connecting {
-    // puede que estas cosas referencien a request_st
     buffer   *wb;
     int      *origin_fd;
     int      *client_fd;
@@ -200,6 +211,7 @@ struct socks5 {
     int                           client_fd;
     struct sockaddr_storage       client_addr; // direccion IP
     socklen_t                     client_addr_len; // tamaño de IP (v4 o v6)
+    char                          *client_uname;
 
     /** resolucion DNS de la direc del origin server */
     struct addrinfo               *origin_resolution;
@@ -218,6 +230,7 @@ struct socks5 {
     /** estados para el client_fd */
     union {
         struct hello_st           hello;
+        struct auth_st            auth;
         struct request_st         request;
         struct copy               copy;
     } client;
@@ -486,6 +499,121 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
                 // tambien podia haber un mensaje de error en el buffer, populado por el hello_marshall()
                 ret = ERROR;
             }
+        }
+    }
+
+    return ret;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AUTH
+////////////////////////////////////////////////////////////////////////////////
+
+struct user {
+    char    uname[0xff];
+    char    passwd[0xff];
+};
+
+struct user users[MAX_USERS];
+size_t      registered_users = 0;
+
+void socksv5_register_user(char *uname, char *passwd) {
+    strncpy(users[registered_users].uname, uname, 0xff);
+    strncpy(users[registered_users++].passwd, passwd, 0xff);
+}
+
+/** inicializa las variables de los estados AUTH_ */
+static void
+auth_init(const unsigned state, struct selector_key *key) {
+    struct auth_st *d       = &ATTACHMENT(key)->client.auth;
+
+    d->rb                   = &(ATTACHMENT(key)->read_buffer);
+    d->wb                   = &(ATTACHMENT(key)->write_buffer);
+    d->parser.auth          = &d->auth;
+    d->status               = auth_status_failure;
+    auth_parser_init(&d->parser);
+    d->uname                = ATTACHMENT(key)->client_uname;
+}
+
+static unsigned
+auth_process(struct selector_key *key, struct auth_st *d);
+
+/** lee todos los bytes del mensaje de tipo 'auth' e inicia su proceso */
+static unsigned
+auth_read(struct selector_key *key) {
+    struct auth_st *d       = &ATTACHMENT(key)->client.auth;
+
+    buffer *b            = d->rb;
+    unsigned ret         = AUTH_READ;
+    bool error           = false;
+    uint8_t *ptr;
+    size_t count;
+    ssize_t n;
+
+    ptr = buffer_write_ptr(b, &count);
+    n = recv(key->fd, ptr, count, 0);
+    if (n > 0) {
+        buffer_write_adv(b, n);
+        int st = auth_consume(b, &d->parser, &error);
+        if (auth_is_done(st, 0))
+            ret = auth_process(key, d);
+    } else {
+        ret = ERROR;
+    }
+
+    return error ? ERROR : ret;
+}
+
+static unsigned
+auth_process(struct selector_key *key, struct auth_st *d) {
+    unsigned ret            = AUTH_WRITE;
+    
+    for (size_t i = 0; i < registered_users; i++) {
+        if (strncmp(d->auth.uname, users[i].uname, 0xff) == 0 &&
+            strncmp(d->auth.passwd, users[i].passwd, 0xff) == 0) {
+            // sets client uname in struct socks5
+            d->uname = users[i].uname;
+            d->status = auth_status_succeeded;
+            return ret;
+        }
+    }
+    d->status = auth_status_failure;
+    return ret;
+}
+
+static unsigned
+auth_write(struct selector_key *key) {
+    struct auth_st *d       = &ATTACHMENT(key)->client.auth;
+    
+    unsigned ret = AUTH_WRITE;
+    buffer *b    = d->wb;
+    uint8_t *ptr;
+    size_t count;
+    ssize_t n;
+
+    if (-1 == auth_marshall(b, d->status)) {
+        d->status = status_general_SOCKS_server_failure;
+        abort();
+    }
+
+    ptr = buffer_read_ptr(b, &count);
+    n = send(key->fd, ptr, count, MSG_NOSIGNAL);
+    if (n == -1) {
+        ret = ERROR;
+    } else {
+        buffer_read_adv(b, n);
+        if (!buffer_can_read(b)) {
+            if (d->status == auth_status_succeeded) {
+                if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ))
+                    ret = REQUEST_READ;
+                else
+                    ret = ERROR;
+            } else {
+                // close conection
+                ret = ERROR;
+                selector_set_interest_key(key, OP_NOOP);
+            }
+            
         }
     }
 
@@ -963,6 +1091,15 @@ static const struct state_definition client_statbl[] = {
         .on_write_ready   = hello_write,
     },
     {
+        .state            = AUTH_READ,
+        .on_arrival       = auth_init,
+        .on_read_ready    = auth_read,
+    },
+    {
+        .state            = AUTH_WRITE,
+        .on_write_ready   = auth_write,
+    },
+    {
         .state            = REQUEST_READ,
         .on_arrival       = request_init,
         .on_departure     = request_read_close,
@@ -1055,4 +1192,32 @@ socksv5_done(struct selector_key* key) {
             close(fds[i]);
         }
     }
+}
+
+/*  
+    fecha  que se procesó la conexión en formato ISO-8601.  Ejemplo 2022-06-15T19:56:34Z.
+
+    nombre de usuario
+            que hace el requerimiento.  Ejemplo juan.
+
+    tipo de registro
+            Siempre el caracter A.
+
+    direccion IP origen
+            desde donde se conectó el usuario.  Ejemplo ::1.
+
+    puerto origen
+            desde donde se conectó el usuario.  Ejemplo 54786.
+
+    destino
+            a donde nos conectamos. nombre o dirección IP (según ATY).  Ejemplo www.itba.edu.ar.  Ejemplo ::1.
+
+    puerto destino
+            Ejemplo 443.
+
+    status Status code de SOCKSv5. Ejemplo 0.
+*/
+/** Registra  el  uso  del  proxy en salida estandar. Una conexión por línea. Los campos de una línea separado por tabs. */
+void log_request(enum socks_response_status status, const struct sockaddr *clientaddr, const struct sockaddr* originaddr) {
+    // TODO: usar sockaddr_to_human() de netutils?
 }

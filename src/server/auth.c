@@ -1,10 +1,9 @@
 #include <string.h> //memset
 
 #include "../include/auth.h"
-#define RESPONSE_LEN    2
 
 static void
-remaining_set(struct auth_parser *p, const int len) {
+remaining_set(struct auth_parser *p, int len) {
     p->i = 0;
     p->len = len;
 }
@@ -37,31 +36,29 @@ version(const uint8_t c, struct auth_parser *p) {
 
 static enum auth_state
 ulen(const uint8_t c, struct auth_parser *p) {
-    p->i = 0;
-    p->len = c;
+    remaining_set(p, c);
     return auth_uname;
 }
 
 static enum auth_state
 uname(const uint8_t c, struct auth_parser *p) {
     p->auth->uname[p->i++] = c;
-    if (p->i == p->len)
+    if (remaining_is_done(p))
         return auth_plen;
     return auth_uname;
 }
 
 static enum auth_state
 plen(const uint8_t c, struct auth_parser *p) {
-    p->i = 0;
-    p->len = c;
+    remaining_set(p, c);
     return auth_passwd;
 }
 
 static enum auth_state
 passwd(const uint8_t c, struct auth_parser *p) {
     p->auth->passwd[p->i++] = c;
-    if (p->i == p->len)
-        return auth_is_done;
+    if (remaining_is_done(p))
+        return auth_done;
     return auth_passwd;
 }
 
@@ -107,7 +104,7 @@ auth_consume(buffer *b, struct auth_parser *p, bool *errored) {
     while (buffer_can_read(b)) {
         const uint8_t c = buffer_read(b);
         st = auth_parser_feed(p, c); // cargamos 1 solo byte
-        if (request_is_done(st, errored))
+        if (auth_is_done(st, errored))
             break;
     }
     return st;
@@ -127,17 +124,17 @@ auth_close(struct auth_parser *p) {
 }
 
 extern int
-auth_marshall(buffer *b, const enum auth_response_status status){
+auth_marshall(buffer *b, const enum auth_response_status status) {
     size_t n;
-    uint8_t *buff = buffer_write_ptr(b, &n);
+    buffer_write_ptr(b, &n);
 
-    if(n < RESPONSE_LEN)
+    if(n < 2)
         return -1;
     
-    buffer_write(b, 0x01);
-    buffer_write(b, status);
+    buffer_write(b, 0x01); // version
+    buffer_write(b, status); // 00 ok, 01 invalid auth
 
-    buffer_write_adv(b, RESPONSE_LEN);
+    buffer_write_adv(b, 2);
 
-    return RESPONSE_LEN;
+    return 2;
 }
