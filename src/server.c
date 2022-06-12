@@ -86,7 +86,7 @@ main(const int argc, const char **argv) {
         err_msg = "unable to create IPv6 socket";
         goto finally;
     }
-    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", 1081);
+    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", port);
 
     // registrar sigterm es útil para terminar el programa normalmente.
     // esto ayuda mucho en herramientas como valgrind.
@@ -197,7 +197,7 @@ create_socket(sa_family_t family) {
 
 static int
 bind_socket(int server, struct sockaddr *address, socklen_t address_len) {
-    if(bind(server, address, address_len) < 0) {
+    if (bind(server, address, address_len) < 0) {
         fprintf(stderr, "unable to bind socket\n");
         return -1;
     }
@@ -231,6 +231,7 @@ bind_ipv4_socket(struct in_addr bind_address, unsigned port) {
 static int
 bind_ipv6_socket(struct in6_addr bind_address, unsigned port) {
     const int server = create_socket(AF_INET6);
+    setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int){1}, sizeof(int)); // man ipv6, si falla fallara el bind
 
     struct sockaddr_in6 addr;
     memset(&addr, 0, sizeof(addr));
@@ -238,7 +239,7 @@ bind_ipv6_socket(struct in6_addr bind_address, unsigned port) {
     addr.sin6_addr        = bind_address;
     addr.sin6_port        = htons(port); // htons translates a short integer from host byte order to network byte order.
 
-    if (bind_socket(server, (struct sockaddr*) &addr, sizeof(addr)) == 1)
+    if (bind_socket(server, (struct sockaddr*) &addr, sizeof(addr)) == -1)
         return -1;
 
     return server;
