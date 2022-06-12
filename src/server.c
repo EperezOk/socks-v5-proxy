@@ -22,12 +22,13 @@
 #include <sys/socket.h>  // socket
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 
 // #include "include/socks5.h"
 #include "include/selector.h"
 #include "include/socks5nio.h"
+#include "include/args.h"
 
-#define DEFAULT_PORT    1080
 #define MAX_CONNECTIONS 512
 
 static bool done = false;
@@ -41,28 +42,28 @@ sigterm_handler(const int signal) {
 static int bind_ipv4_socket(struct in_addr bind_address, unsigned port);
 static int bind_ipv6_socket(struct in6_addr bind_address, unsigned port);
 
+static void
+print_args(struct socks5args args){
+    printf("Args received:\n");
+        
+    if(strcmp(args.socks_addr, DEFAULT_SOCKS_ADDR) != 0)
+        printf("- socks_addr: %s\n", args.socks_addr);
+    if(args.socks_port != DEFAULT_SOCKS_PORT)
+        printf("- socks_port: %d\n", args.socks_port);
+    if(strcmp(args.mng_addr, DEFAULT_CONF_ADDR) != 0)
+        printf("- mng_addr: %s\n", args.mng_addr);
+    if(args.mng_port != DEFAULT_CONF_PORT)
+        printf("- mng_port: %d\n", args.mng_port);
+    if(args.disectors_enabled != DEFAULT_DISECTORS_ENABLED)
+        printf("- has_disectors: %s\n", args.disectors_enabled ? "true" : "false");
+}
+
 int
-main(const int argc, const char **argv) {
-    unsigned port = DEFAULT_PORT;
+main(const int argc, char **argv) {
+    struct socks5args args;
 
-    if(argc == 1) {
-        // utilizamos el default
-    } else if(argc == 2) {
-        // parseamos el segundo argumento a int para tomarlo como puerto
-        char *end     = 0;
-        const long sl = strtol(argv[1], &end, 10);
-
-        if (end == argv[1]|| '\0' != *end 
-           || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
-           || sl < 0 || sl > USHRT_MAX) {
-            fprintf(stderr, "port should be an integer: %s\n", argv[1]);
-            return 1;
-        }
-        port = sl;
-    } else {
-        fprintf(stderr, "Usage: %s <port>\n", argv[0]);
-        return 1;
-    }
+    parse_args(argc, argv, &args);
+    print_args(args);
 
     // no tenemos nada que leer de stdin
     close(0);
@@ -71,22 +72,34 @@ main(const int argc, const char **argv) {
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
 
-    // TODO: aca deberiamos usar la direccion recibamos en la opcion de linea de comandos "-l"
-    struct in_addr address = { .s_addr = htonl(INADDR_ANY) };
-    const int server = bind_ipv4_socket(address, port);
+    struct in_addr ipv4_addr;
+
+    if(inet_pton(AF_INET, args.socks_addr, &ipv4_addr) < 0){
+        err_msg = "unable to parse server ipv4";
+        goto finally;
+    }
+
+    const int server = bind_ipv4_socket(ipv4_addr, args.socks_port);
     if (server < 0) {
         err_msg = "unable to create IPv4 socket";
         goto finally;
     }
-    fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", port);
+    fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
 
-    // TODO: aca deberiamos usar la direccion recibamos en la opcion de linea de comandos "-l"
-    const int server_v6 = bind_ipv6_socket(in6addr_any, port);
+    
+    struct in6_addr address_v6;
+
+    if(inet_pton(AF_INET6, args.socks_addr, &address_v6) < 0){
+        err_msg = "unable to parse server ipv6";
+        goto finally;
+    }
+
+    const int server_v6 = bind_ipv6_socket(in6addr_any, args.socks_port);
     if (server_v6 < 0) {
         err_msg = "unable to create IPv6 socket";
         goto finally;
     }
-    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", port);
+    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
 
     // registrar sigterm es útil para terminar el programa normalmente.
     // esto ayuda mucho en herramientas como valgrind.
