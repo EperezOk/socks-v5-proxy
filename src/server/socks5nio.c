@@ -201,7 +201,7 @@ struct socks5 {
     struct sockaddr_storage       client_addr; // direccion IP
     socklen_t                     client_addr_len; // tamaño de IP (v4 o v6)
 
-    /** resolucion de la direc del origin server */
+    /** resolucion DNS de la direc del origin server */
     struct addrinfo               *origin_resolution;
     /** intento actual de la direccion del origin server */
     struct addrinfo               *origin_resolution_current;
@@ -653,11 +653,10 @@ request_resolv_done(struct selector_key *key) {
         d->status = status_general_SOCKS_server_failure;
         // return REQUEST_WRITE ??? Deberia igual tambien poner un mensaje en el buffer (quizas con request_marshall) y setear el socket en OP_WRITE primero antes de cambiar a REQUEST_WRITE
     } else {
+        s->origin_resolution_current = s->origin_resolution;
         s->origin_domain = s->origin_resolution->ai_family;
         s->origin_addr_len = s->origin_resolution->ai_addrlen;
         memcpy(&s->origin_addr, s->origin_resolution->ai_addr, s->origin_resolution->ai_addrlen);
-        freeaddrinfo(s->origin_resolution);
-        s->origin_resolution = 0;
     }
 
     return request_connect(key, d);
@@ -748,7 +747,8 @@ static unsigned
 request_connecting(struct selector_key *key) { // key es un origin_fd
     int error;
     socklen_t len = sizeof(error);
-    struct connecting *d = &ATTACHMENT(key)->orig.conn;
+    struct socks5 *s     = ATTACHMENT(key);
+    struct connecting *d = &s->orig.conn;
 
     if (getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
         *d->status = status_general_SOCKS_server_failure;
@@ -756,11 +756,22 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
         if (error == 0) {
             *d->status = status_succeeded;
             *d->origin_fd = key->fd;
+        } else if (s->client.request.request.dest_addr_type == socks_req_addrtype_domain && s->origin_resolution_current->ai_next != NULL) {
+            s->origin_resolution_current = s->origin_resolution_current->ai_next;
+            s->origin_domain = s->origin_resolution_current->ai_family;
+            s->origin_addr_len = s->origin_resolution_current->ai_addrlen;
+            memcpy(&s->origin_addr, s->origin_resolution_current->ai_addr, s->origin_resolution_current->ai_addrlen);
+            request_connect(key, &s->client.request);
+            return REQUEST_CONNECTING;
         } else {
-            // TODO
-            // llamar nuevamente a connect pero avanzando el puntero de getaddrinfo a la siguiente rta, y retornar REQUEST_CONNECTING? Si no hay mas opciones en la lista, setear el status de error como esta hecho y seguir el flujo de esta funcion
             *d->status = errno_to_socks(error);
         }
+    }
+
+    if (s->client.request.request.dest_addr_type == socks_req_addrtype_domain) {
+        freeaddrinfo(s->origin_resolution);
+        s->origin_resolution = 0;
+        s->origin_resolution_current = 0;
     }
 
     // TODO: se podra mover el request marshall directamente al request_write() para poder ir ahi desde otros estados en caso de error (por ej desde REQUEST_RESOLV)
@@ -768,12 +779,12 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
         *d->status = status_general_SOCKS_server_failure;
         abort(); // el buffer tiene que ser mas grande en la variable
     }
-    selector_status s = 0;
-    s |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
-    s |= selector_set_interest_key(key, OP_NOOP);
+    selector_status ss = 0;
+    ss |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+    ss |= selector_set_interest_key(key, OP_NOOP);
 
     // se llamara a request_write() en ambos casos, pero difieren en *d->status por lo que si falla pasara a estado de DONE/ERROR y sino a COPY
-    return SELECTOR_SUCCESS == s ? REQUEST_WRITE : ERROR;
+    return SELECTOR_SUCCESS == ss ? REQUEST_WRITE : ERROR;
 }
 
 void log_request(enum socks_response_status status, const struct sockaddr *clientaddr, const struct sockaddr* originaddr);
