@@ -119,7 +119,7 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                 break;
             case 'u':
                 if(nusers >= MAX_USERS) {
-                    fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
+                    fprintf(stderr, "%s: sent too many users, maximum allowed is %d\n", argv[0], MAX_USERS);
                     exit(1);
                 } else {
                     user(optarg, args->users + nusers, argv[0]);
