@@ -398,11 +398,14 @@ fail:
 // HELLO
 ////////////////////////////////////////////////////////////////////////////////
 
+bool isAuthOn = false; // TODO: turn on
+
 /** callback del parser utilizado en `read_hello' */
 static void
 on_hello_method(struct hello_parser *p, const uint8_t method) {
     uint8_t *selected  = p->data;
 
+    // TODO: extender a username y password aca?
     if(SOCKS_HELLO_NOAUTHENTICATION_REQUIRED == method) {
        *selected = method;
     }
@@ -491,10 +494,10 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
         ret = ERROR;
     } else {
         buffer_read_adv(d->wb, n);
-        // si terminamos de mandar toda la response del HELLO, hacemos transicion HELLO_WRITE -> REQUEST_READ
+        // si terminamos de mandar toda la response del HELLO, hacemos transicion HELLO_WRITE -> AUTH_READ o HELLO_WRITE -> REQUEST_READ si tenemos la auth desactivada
         if (!buffer_can_read(d->wb)) {
             if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
-                ret = REQUEST_READ;
+                ret = isAuthOn ? AUTH_READ : REQUEST_READ;
             } else {
                 // tambien podia haber un mensaje de error en el buffer, populado por el hello_marshall()
                 ret = ERROR;
@@ -572,7 +575,7 @@ auth_process(struct selector_key *key, struct auth_st *d) {
         if (strncmp(d->auth.uname, users[i].uname, 0xff) == 0 &&
             strncmp(d->auth.passwd, users[i].passwd, 0xff) == 0) {
             // sets client uname in struct socks5
-            d->uname = users[i].uname;
+            ATTACHMENT(key)->client_uname = users[i].uname;
             d->status = auth_status_succeeded;
             return ret;
         }
@@ -914,7 +917,7 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
     return SELECTOR_SUCCESS == ss ? REQUEST_WRITE : ERROR;
 }
 
-void log_request(enum socks_response_status status, const struct sockaddr *clientaddr, const struct sockaddr* originaddr);
+void log_request(enum socks_response_status status, const char *uname, struct request *request, const struct sockaddr *clientaddr, const struct sockaddr* originaddr);
 
 /** escribe todos los bytes de la respuesta al mensaje 'request' */
 static unsigned
@@ -954,7 +957,13 @@ request_write(struct selector_key *key) {
     }
 
     // TODO: implementar de acuerdo a lo pedido en el man que nos dieron
-    // log_request(d->status, (const struct sockaddr *) &ATTACHMENT(key)->client_addr, (const struct sockaddr *) &ATTACHMENT(key)->origin_addr);
+    log_request(
+        d->status,
+        ATTACHMENT(key)->client_uname,
+        &ATTACHMENT(key)->client.request.request,
+        (const struct sockaddr *) &ATTACHMENT(key)->client_addr,
+        (const struct sockaddr *) &ATTACHMENT(key)->origin_addr
+    );
 
     return ret;
 }
@@ -1194,30 +1203,48 @@ socksv5_done(struct selector_key* key) {
     }
 }
 
-/*  
-    fecha  que se procesó la conexión en formato ISO-8601.  Ejemplo 2022-06-15T19:56:34Z.
-
-    nombre de usuario
-            que hace el requerimiento.  Ejemplo juan.
-
-    tipo de registro
-            Siempre el caracter A.
-
-    direccion IP origen
-            desde donde se conectó el usuario.  Ejemplo ::1.
-
-    puerto origen
-            desde donde se conectó el usuario.  Ejemplo 54786.
-
-    destino
-            a donde nos conectamos. nombre o dirección IP (según ATY).  Ejemplo www.itba.edu.ar.  Ejemplo ::1.
-
-    puerto destino
-            Ejemplo 443.
-
-    status Status code de SOCKSv5. Ejemplo 0.
-*/
 /** Registra  el  uso  del  proxy en salida estandar. Una conexión por línea. Los campos de una línea separado por tabs. */
-void log_request(enum socks_response_status status, const struct sockaddr *clientaddr, const struct sockaddr* originaddr) {
-    // TODO: usar sockaddr_to_human() de netutils?
+void log_request(enum socks_response_status status, const char *uname, struct request *request, const struct sockaddr *clientaddr, const struct sockaddr* originaddr) {
+    // ISO-8601 date
+    char buf[50];
+    time_t rawtime;
+    struct tm *ptm;
+
+    if ((rawtime = time(NULL)) != -1 && (ptm = localtime(&rawtime)) != NULL) {
+        if (strftime(buf, 50, "%FT%T", ptm) > 0)
+            printf("%s", buf);
+        else
+            printf("<date error>");
+    } else {
+        printf("<date error>");
+    }
+    // a pesar de que tira error en el editor, anda e indica el offset local con respecto a UTC
+    printf("%s", ptm->__tm_zone);
+    putchar('\t');
+
+    // username del cliente
+    printf("%s", isAuthOn ? uname : "<anonymous>");
+    putchar('\t');
+
+    // tipo de registro
+    putchar('A');
+    putchar('\t');
+
+    // IP y puerto cliente
+    sockaddr_to_human(buf, 50, clientaddr);
+    printf("%s", buf);
+    putchar('\t');
+
+    // IP/FQDN y puerto origin server (destino)
+    if (request->dest_addr_type == socks_req_addrtype_domain) {
+        printf("%s\t%d", request->dest_addr.fqdn, ntohs(request->dest_port));
+    } else {
+        sockaddr_to_human(buf, 50, originaddr);
+        printf("%s", buf);
+    }
+    putchar('\t');
+
+    // status code socks5
+    printf("%d", status);
+    putchar('\n');
 }
