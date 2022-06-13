@@ -42,6 +42,7 @@ sigterm_handler(const int signal) {
 static int bind_ipv4_socket(struct in_addr bind_address, unsigned port);
 static int bind_ipv6_socket(struct in6_addr bind_address, unsigned port);
 
+// TODO: Delete once parsing is finished or move to tests
 static void
 print_args(struct socks5args args){
     printf("Args received:\n");
@@ -73,33 +74,39 @@ main(const int argc, char **argv) {
     fd_selector selector      = NULL;
 
     struct in_addr ipv4_addr;
+    int server = -1;
+    bool hasIpv4 = false;
 
-    if(inet_pton(AF_INET, args.socks_addr, &ipv4_addr) < 0){
-        err_msg = "unable to parse server ipv4";
-        goto finally;
+    struct in6_addr ipv6_addr;
+    int server_v6 = 1;
+    bool hasIpv6 = false;
+
+    if(inet_pton(AF_INET, args.socks_addr, &ipv4_addr) == 1){       // if parsing to ipv4 succeded
+        server = bind_ipv4_socket(ipv4_addr, args.socks_port);
+        if (server < 0) {
+            err_msg = "unable to create IPv4 socket";
+            goto finally;
+        }
+        fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
+        hasIpv4 = true;
     }
 
-    const int server = bind_ipv4_socket(ipv4_addr, args.socks_port);
-    if (server < 0) {
-        err_msg = "unable to create IPv4 socket";
-        goto finally;
-    }
-    fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
+    char* ipv6_addr_text = args.is_default_socks_addr ? DEFAULT_SOCKS_ADDR_V6 : args.socks_addr;
 
+    if((!hasIpv4 || args.is_default_socks_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &ipv6_addr) == 1)){
+        server_v6 = bind_ipv6_socket(ipv6_addr, args.socks_port);
+        if (server_v6 < 0) {
+            err_msg = "unable to create IPv6 socket";
+            goto finally;
+        }
+        fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
+        hasIpv6 = true;
+    }
     
-    struct in6_addr address_v6;
-
-    if(inet_pton(AF_INET6, args.socks_addr, &address_v6) < 0){
-        err_msg = "unable to parse server ipv6";
+    if(!hasIpv4 && !hasIpv6) {
+        err_msg = "unable to parse server ip";
         goto finally;
     }
-
-    const int server_v6 = bind_ipv6_socket(address_v6, args.socks_port);
-    if (server_v6 < 0) {
-        err_msg = "unable to create IPv6 socket";
-        goto finally;
-    }
-    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
 
     // registrar sigterm es útil para terminar el programa normalmente.
     // esto ayuda mucho en herramientas como valgrind.
@@ -107,8 +114,13 @@ main(const int argc, char **argv) {
     signal(SIGINT,  sigterm_handler);
 
     // seteamos los sockets pasivos como no bloqueantes
-    if(selector_fd_set_nio(server) == -1 || selector_fd_set_nio(server_v6) == -1) {
-        err_msg = "getting server socket flags";
+    if(hasIpv4 && (selector_fd_set_nio(server) == -1)){
+        err_msg = "getting server ipv4 socket flags";
+        goto finally;
+    }
+
+    if(hasIpv6 && (selector_fd_set_nio(server_v6) == -1)) {
+        err_msg = "getting server ipv6 socket flags";
         goto finally;
     }
 
@@ -137,16 +149,30 @@ main(const int argc, char **argv) {
         .handle_close      = NULL, // nada que liberar
     };
 
-    ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
-    if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering IPv4 fd";
-        goto finally;
-    }
-
-    ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
-    if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering IPv6 fd";
-        goto finally;
+    if(hasIpv4 && !hasIpv6){
+        ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv4 fd";
+            goto finally;
+        }
+        
+    } else if(!hasIpv4 && hasIpv6){
+        ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv6 fd";
+            goto finally;
+        }
+    } else {
+        ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv4 fd";
+            goto finally;
+        }
+        ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv6 fd";
+            goto finally;
+        }
     }
 
     // termina con un ctrl + C pero dejando un mensajito

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #define DEFAULT_SOCKS_ADDR          "0.0.0.0"
+#define DEFAULT_SOCKS_ADDR_V6       "::0"
 #define DEFAULT_SOCKS_PORT          1080
 
 #define DEFAULT_CONF_ADDR           "127.0.0.1"

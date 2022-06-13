@@ -66,9 +66,11 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
 
     args->socks_addr = DEFAULT_SOCKS_ADDR;
     args->socks_port = DEFAULT_SOCKS_PORT;
+    args->is_default_socks_addr = true;         // Pongo los valores default. Si recibo un parametro con un valor los cambio abajo
 
     args->mng_addr   = DEFAULT_CONF_ADDR;
     args->mng_port   = DEFAULT_CONF_PORT;
+    args->is_default_mng_addr = true;
 
     args->disectors_enabled = true;
 
@@ -85,6 +87,10 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                 - '<opcion>::'  ->  Para opciones con argumentos opcionales (No tenemos asi que no se usa)
             En el caso de que se lea una opcion válida se incrementa la variable 'optind' y se guarda el valor del
             argumento leido en 'optarg' si tiene argumento, sino se setea en 0 (optarg = NULL).
+            Además, se puede aregar un ':' al principio del string, así los errores no se imprimen en pantalla. Esto sirve
+            para diferenciar cuando el error es por argumento invalido (getopt retorna '?') o que el argumento es valido
+            pero falta su valor (getopt retorna '!'). En ambos retornos, el argumento procesado se guarda en 'optopt' y se
+            puede usar en los mensajes de error custom.
         */
         c = getopt(argc, argv, ":hl:L:Np:P:u:v");
         if (c == -1)
@@ -96,11 +102,11 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                 break;
             case 'l':
                 args->socks_addr = optarg;
-                args->is_default_socks_addr = true;
+                args->is_default_socks_addr = false;
                 break;
             case 'L':
                 args->mng_addr = optarg;
-                args->is_default_mng_addr = true;
+                args->is_default_mng_addr = false;
                 break;
             case 'N':
                 args->disectors_enabled = false;
