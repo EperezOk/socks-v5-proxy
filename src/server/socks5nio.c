@@ -398,16 +398,16 @@ fail:
 // HELLO
 ////////////////////////////////////////////////////////////////////////////////
 
-bool isAuthOn = false; // TODO: turn on
+bool isAuthOn = true; // TODO: turn on
 
-/** callback del parser utilizado en `read_hello' */
+/** callback que utiliza el parser cada vez que lee un metodo nuevo para elegir alguno de ellos */
 static void
 on_hello_method(struct hello_parser *p, const uint8_t method) {
     uint8_t *selected  = p->data;
 
-    // TODO: extender a username y password aca?
-    if(SOCKS_HELLO_NOAUTHENTICATION_REQUIRED == method) {
-       *selected = method;
+    if ((!isAuthOn && SOCKS_HELLO_NO_AUTHENTICATION_REQUIRED == method)
+    || (isAuthOn && SOCKS_HELLO_USERNAME_PASSWORD == method)) {
+       *selected = method; // escribe sobre struct hello_st method
     }
 }
 
@@ -419,6 +419,7 @@ hello_read_init(const unsigned state, struct selector_key *key) {
     d->rb                              = &(ATTACHMENT(key)->read_buffer);
     d->wb                              = &(ATTACHMENT(key)->write_buffer);
     d->parser.data                     = &d->method;
+    d->method                          = SOCKS_HELLO_NO_ACCEPTABLE_METHODS;
     d->parser.on_authentication_method = on_hello_method, hello_parser_init(&d->parser);
 }
 
@@ -459,15 +460,9 @@ static unsigned
 hello_process(const struct hello_st* d) {
     unsigned ret = HELLO_WRITE;
 
-    uint8_t m = d->method;
-    // TODO: add more auth methods here?
-    const uint8_t r = (m == SOCKS_HELLO_NO_ACCEPTABLE_METHODS) ? 0xFF : 0x00;
-    if (-1 == hello_marshall(d->wb, r)) {
-        ret  = ERROR;
-    }
-    if (SOCKS_HELLO_NO_ACCEPTABLE_METHODS == m) {
-        ret  = ERROR;
-    }
+    if (-1 == hello_marshall(d->wb, d->method))
+        ret  = ERROR; // no hay lugar suficiente en el buffer de escritura para mandar la rta
+
     return ret;
 }
 
@@ -494,12 +489,12 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
         ret = ERROR;
     } else {
         buffer_read_adv(d->wb, n);
-        // si terminamos de mandar toda la response del HELLO, hacemos transicion HELLO_WRITE -> AUTH_READ o HELLO_WRITE -> REQUEST_READ si tenemos la auth desactivada
+        // si terminamos de mandar toda la response del HELLO, hacemos transicion HELLO_WRITE -> AUTH_READ o HELLO_WRITE -> REQUEST_READ
         if (!buffer_can_read(d->wb)) {
             if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
+                // en caso de que haya fallado el handshake del hello, el cliente es el que cerrara la conexion
                 ret = isAuthOn ? AUTH_READ : REQUEST_READ;
             } else {
-                // tambien podia haber un mensaje de error en el buffer, populado por el hello_marshall()
                 ret = ERROR;
             }
         }
@@ -530,6 +525,11 @@ static void
 auth_init(const unsigned state, struct selector_key *key) {
     struct auth_st *d       = &ATTACHMENT(key)->client.auth;
 
+    // TODO: delete
+    strcpy(users[registered_users].uname, "admin");
+    strcpy(users[registered_users].passwd, "admin");
+    registered_users++;
+
     d->rb                   = &(ATTACHMENT(key)->read_buffer);
     d->wb                   = &(ATTACHMENT(key)->write_buffer);
     d->parser.auth          = &d->auth;
@@ -558,8 +558,13 @@ auth_read(struct selector_key *key) {
     if (n > 0) {
         buffer_write_adv(b, n);
         int st = auth_consume(b, &d->parser, &error);
-        if (auth_is_done(st, 0))
-            ret = auth_process(key, d);
+        if (auth_is_done(st, 0)) {
+            if(SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+                ret = auth_process(key, d);
+            } else {
+                ret = ERROR;
+            }
+        }
     } else {
         ret = ERROR;
     }
