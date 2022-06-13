@@ -8,14 +8,14 @@
 #include "../include/args.h"
 
 static unsigned short
-port(const char *s) {
+port(const char *s, char* progname) {
     char *end     = 0;
     const long sl = strtol(s, &end, 10);
 
     if (end == s|| '\0' != *end 
     || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
         || sl < 0 || sl > USHRT_MAX) {
-        fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
+        fprintf(stderr, "%s: invalid port %s, should be an integer in the range of 1-65536.\n", progname, s);
         exit(1);
         return 1;
     }
@@ -23,10 +23,10 @@ port(const char *s) {
 }
 
 static void
-user(char *s, struct users *user) {
+user(char *s, struct users *user, char* progname) {
     char *p = strchr(s, ':');
     if(p == NULL) {
-        fprintf(stderr, "password not found\n");
+        fprintf(stderr, "%s: missing password for user %s.\n", progname, s);
         exit(1);
     } else {
         *p = 0;
@@ -39,16 +39,14 @@ user(char *s, struct users *user) {
 
 static void
 version(void) {
-    fprintf(stderr, "socks5v version 0.0\n"
-                    "ITBA Protocolos de Comunicación 2022/1 -- Grupo 13\n"
-                    "AQUI VA LA LICENCIA\n");
+    fprintf(stderr, "socks5v version 1.0\n"
+                    "ITBA Protocolos de Comunicación 2022/1 -- Grupo 13\n");
 }
 
 static void
 usage(const char *progname) {
     fprintf(stderr,
         "Usage: %s [OPTION]...\n"
-        "\n"
         "   -h              Imprime la ayuda y termina.\n"
         "   -l<SOCKS addr>  Dirección donde servirá el proxy SOCKS.\n"
         "   -N              Deshabilita los passwords disectors.\n"
@@ -57,13 +55,6 @@ usage(const char *progname) {
         "   -P<conf  port>  Puerto SCTP para conexiones entrantes del protocolo de configuracion. Por defecto es 8080.\n"
         "   -u<user>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
         "   -v              Imprime información sobre la versión y termina.\n"
-        "\n"
-        "   --doh-ip    <ip>    \n"
-        "   --doh-port  <port>  XXX\n"
-        "   --doh-host  <host>  XXX\n"
-        "   --doh-path  <host>  XXX\n"
-        "   --doh-query <host>  XXX\n"
-
         "\n",
         progname);
     exit(1);
@@ -81,27 +72,21 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
 
     args->disectors_enabled = true;
 
-    args->doh.host = "localhost";
-    args->doh.ip   = "127.0.0.1";
-    args->doh.port = 8053;
-    args->doh.path = "/getnsrecord";
-    args->doh.query = "?dns=";
-
     int c;
     int nusers = 0;
 
     while (true) {
-        int option_index = 0;
-        static struct option long_options[] = {
-            { "doh-ip",    required_argument, 0, 0xD001 },
-            { "doh-port",  required_argument, 0, 0xD002 },
-            { "doh-host",  required_argument, 0, 0xD003 },
-            { "doh-path",  required_argument, 0, 0xD004 },
-            { "doh-query", required_argument, 0, 0xD005 },
-            { 0,           0,                 0, 0 }
-        };
-
-        c = getopt_long(argc, argv, "hl:L:Np:P:u:v", long_options, &option_index);
+        /*
+            Uso: getopt(argc, argv, optstring)
+            - argc, argv: Los de consola
+            - optstring: String con los caracteres de las opciones válidas concatenados. Pueden tener 2 formatos:
+                - '<opcion>'    ->  Para opciones sin argumentos (ej: "./socks5d -h")
+                - '<opcion>:'   ->  Para opciones con argumentos (ej: "./socks5d -p9999")
+                - '<opcion>::'  ->  Para opciones con argumentos opcionales (No tenemos asi que no se usa)
+            En el caso de que se lea una opcion válida se incrementa la variable 'optind' y se guarda el valor del
+            argumento leido en 'optarg' si tiene argumento, sino se setea en 0 (optarg = NULL).
+        */
+        c = getopt(argc, argv, ":hl:L:Np:P:u:v");
         if (c == -1)
             break;
 
@@ -121,17 +106,17 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                 args->disectors_enabled = false;
                 break;
             case 'p':
-                args->socks_port = port(optarg);
+                args->socks_port = port(optarg, argv[0]);
                 break;
             case 'P':
-                args->mng_port   = port(optarg);
+                args->mng_port   = port(optarg, argv[0]);
                 break;
             case 'u':
                 if(nusers >= MAX_USERS) {
                     fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
                     exit(1);
                 } else {
-                    user(optarg, args->users + nusers);
+                    user(optarg, args->users + nusers, argv[0]);
                     nusers++;
                 }
                 break;
@@ -139,26 +124,19 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                 version();
                 exit(0);
                 break;
-            case 0xD001:
-                args->doh.ip = optarg;
-                break;
-            case 0xD002:
-                args->doh.port = port(optarg);
-                break;
-            case 0xD003:
-                args->doh.host = optarg;
-                break;
-            case 0xD004:
-                args->doh.path = optarg;
-                break;
-            case 0xD005:
-                args->doh.query = optarg;
-                break;
-            default:
-                fprintf(stderr, "unknown argument %d.\n", c);
+            case ':':
+                fprintf(stderr, "%s: missing value for option -%c.\n", argv[0], optopt);
+                usage(argv[0]);
                 exit(1);
+                break;
+            case '?':
+                fprintf(stderr, "%s: invalid option -%c.\n", argv[0], optopt);
+                usage(argv[0]);
+                exit(1);
+            default:
+                // no deberia llegar aca
+                break;
         }
-
     }
     if (optind < argc) {
         fprintf(stderr, "argument not accepted: ");

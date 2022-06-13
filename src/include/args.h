@@ -14,30 +14,29 @@
 #define MAX_USERS           10
 
 struct users {
-    char *name;
-    char *pass;
+    char            *name;
+    char            *pass;
 };
 
 struct doh {
-    char           *host;
-    char           *ip;
+    char            *host;
+    char            *ip;
     unsigned short  port;
-    char           *path;
-    char           *query;
+    char            *path;
+    char            *query;
 };
 
 struct socks5args {
-    char           *socks_addr;
+    char            *socks_addr;
     bool            is_default_socks_addr;
     unsigned short  socks_port;
 
-    char *          mng_addr;
+    char            *mng_addr;
     bool            is_default_mng_addr;
     unsigned short  mng_port;
 
     bool            disectors_enabled;
 
-    struct doh      doh;
     struct users    users[MAX_USERS];
 };
 
