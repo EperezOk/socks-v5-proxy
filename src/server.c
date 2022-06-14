@@ -31,6 +31,9 @@
 
 #define MAX_CONNECTIONS 512
 
+static const int FD_UNUSED = -1;
+#define IS_FD_USED(fd) ((FD_UNUSED != fd))
+
 static bool done = false;
 
 static void
@@ -74,37 +77,33 @@ main(const int argc, char **argv) {
     fd_selector selector      = NULL;
 
     struct in_addr ipv4_addr;
-    int server = -1;
-    bool hasIpv4 = false;
+    int server_v4 = FD_UNUSED;
 
     struct in6_addr ipv6_addr;
-    int server_v6 = 1;
-    bool hasIpv6 = false;
+    int server_v6 = FD_UNUSED;
 
     if(inet_pton(AF_INET, args.socks_addr, &ipv4_addr) == 1){       // if parsing to ipv4 succeded
-        server = bind_ipv4_socket(ipv4_addr, args.socks_port);
-        if (server < 0) {
+        server_v4 = bind_ipv4_socket(ipv4_addr, args.socks_port);
+        if (server_v4 < 0) {
             err_msg = "unable to create IPv4 socket";
             goto finally;
         }
         fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
-        hasIpv4 = true;
     }
 
     char* ipv6_addr_text = args.is_default_socks_addr ? DEFAULT_SOCKS_ADDR_V6 : args.socks_addr;
 
-    if((!hasIpv4 || args.is_default_socks_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &ipv6_addr) == 1)){
+    if((!IS_FD_USED(server_v4) || args.is_default_socks_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &ipv6_addr) == 1)){
         server_v6 = bind_ipv6_socket(ipv6_addr, args.socks_port);
         if (server_v6 < 0) {
             err_msg = "unable to create IPv6 socket";
             goto finally;
         }
         fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
-        hasIpv6 = true;
     }
     
-    if(!hasIpv4 && !hasIpv6) {
-        err_msg = "unable to parse server ip";
+    if(!IS_FD_USED(server_v4) && !IS_FD_USED(server_v6)) {
+        fprintf(stderr, "unable to parse server ip\n");
         goto finally;
     }
 
@@ -114,12 +113,12 @@ main(const int argc, char **argv) {
     signal(SIGINT,  sigterm_handler);
 
     // seteamos los sockets pasivos como no bloqueantes
-    if(hasIpv4 && (selector_fd_set_nio(server) == -1)){
+    if(IS_FD_USED(server_v4) && (selector_fd_set_nio(server_v4) == -1)){
         err_msg = "getting server ipv4 socket flags";
         goto finally;
     }
 
-    if(hasIpv6 && (selector_fd_set_nio(server_v6) == -1)) {
+    if(IS_FD_USED(server_v6) && (selector_fd_set_nio(server_v6) == -1)) {
         err_msg = "getting server ipv6 socket flags";
         goto finally;
     }
@@ -149,25 +148,14 @@ main(const int argc, char **argv) {
         .handle_close      = NULL, // nada que liberar
     };
 
-    if(hasIpv4 && !hasIpv6){
-        ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
+    if(IS_FD_USED(server_v4)){
+        ss = selector_register(selector, server_v4, &socksv5, OP_READ, NULL);
         if(ss != SELECTOR_SUCCESS) {
             err_msg = "registering IPv4 fd";
             goto finally;
         }
-        
-    } else if(!hasIpv4 && hasIpv6){
-        ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
-        if(ss != SELECTOR_SUCCESS) {
-            err_msg = "registering IPv6 fd";
-            goto finally;
-        }
-    } else {
-        ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
-        if(ss != SELECTOR_SUCCESS) {
-            err_msg = "registering IPv4 fd";
-            goto finally;
-        }
+    }
+    if(IS_FD_USED(server_v6)){
         ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
         if(ss != SELECTOR_SUCCESS) {
             err_msg = "registering IPv6 fd";
@@ -203,15 +191,15 @@ finally:
         ret = 1;
     }
 
-    if(selector != NULL) {
+    if(selector != NULL)
         selector_destroy(selector);
-    }
+
     selector_close();
 
     socksv5_pool_destroy();
 
-    if (server >= 0)
-        close(server);
+    if (server_v4 >= 0)
+        close(server_v4);
 
     if(server_v6 >= 0)
         close(server_v6);
