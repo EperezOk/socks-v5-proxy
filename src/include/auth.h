@@ -1,8 +1,8 @@
 #ifndef AUTH_H
 #define AUTH_H
 
-#include "buffer.h"
 #include <stdint.h>
+#include "buffer.h"
 
 /**
  * Once the SOCKS V5 server has started, and the client has selected the
@@ -46,7 +46,6 @@ enum auth_state {
     auth_uname,
     auth_plen,
     auth_passwd,
-    auth_authenticate,
 
     // apartir de aca estan done
     auth_done,
@@ -59,13 +58,13 @@ enum auth_state {
 };
 
 enum auth_response_status {
-    status_succeeded                            = 0x00,
-    status_failure                              = 0x01,
+    auth_status_succeeded                            = 0x00,
+    auth_status_failure                              = 0x01,
 };
 
 struct auth {
-    uint8_t     uname[0xFF];
-    uint8_t     passwd[0xFF];
+    char     uname[0xFF];
+    char     passwd[0xFF];
 };
 
 struct auth_parser {
@@ -113,10 +112,5 @@ auth_close(struct  auth_parser *p);
  */
 extern int 
 auth_marshall(buffer *b, const enum  auth_response_status status);
-
-
-/** convierte a errno en socks_response_status */
-enum aut_response_status
-errno_to_socks(int e);
 
 #endif

@@ -14,6 +14,7 @@
 
 #include "../include/hello.h"
 #include "../include/request.h"
+#include "../include/auth.h"
 #include "../include/buffer.h"
 
 #include "../include/stm.h"
@@ -50,9 +51,31 @@ enum socks_v5state {
      */
     HELLO_WRITE,
 
-    // TODO: incorporate these
-    // AUTH_READ,
-    // AUTH_WRITE,
+    /**
+     * recibe las credenciales (usuario y contraseña, segun RFC 1929) del cliente, e inicia su proceso
+     * 
+     * Intereses:
+     *     - OP_READ sobre client_fd
+     *
+     * Transiciones:
+     *   - AUTH_READ            mientras el mensaje no este completo
+     *   - AUTH_WRITE           cuando está completo
+     *   - ERROR                ante cualquier error (IO/parseo)
+    */
+    AUTH_READ,
+
+    /**
+     * informa al cliente si la autenticación fue exitosa o no.
+     *
+     * Intereses:
+     *     - OP_WRITE sobre client_fd
+     *
+     * Transiciones:
+     *   - AUTH_WRITE   mientras queden bytes por enviar
+     *   - REQUEST_READ cuando se enviaron todos los bytes
+     *   - ERROR        ante cualquier error (IO/parseo)
+     */
+    AUTH_WRITE,
 
     /**
      * recibe el request del cliente, e inicia su proceso
@@ -150,11 +173,6 @@ struct request_st {
     struct request_parser       parser;
 
     /** el resumen de la respuesta a enviar */
-    // status_general_SOCKS_server_failure, 
-    // status_address_type_not_supported,
-    // status_command_not_supported,
-    // status_succeeded,
-    // errno_to_socks(error),
     enum socks_response_status  status;
 
     // referencian a los campos de struct socks5
@@ -166,9 +184,24 @@ struct request_st {
     int                         *origin_fd;
 };
 
+/** usado por AUTH_READ y AUTH_WRITE */
+struct auth_st {
+    /** buffer utilizado para I/O */
+    buffer                     *rb, *wb;
+
+    /** parser */
+    struct auth                auth;
+    struct auth_parser         parser;
+
+    /** el resumen de la respuesta a enviar */
+    enum auth_response_status  status;
+
+    /** referencia al campo de struct socks5 */
+    char                       *uname;
+};
+
 /** usado por REQUEST_CONNECTING */
 struct connecting {
-    // puede que estas cosas referencien a request_st
     buffer   *wb;
     int      *origin_fd;
     int      *client_fd;
@@ -200,6 +233,7 @@ struct socks5 {
     int                           client_fd;
     struct sockaddr_storage       client_addr; // direccion IP
     socklen_t                     client_addr_len; // tamaño de IP (v4 o v6)
+    char                          *client_uname;
 
     /** resolucion DNS de la direc del origin server */
     struct addrinfo               *origin_resolution;
@@ -218,6 +252,7 @@ struct socks5 {
     /** estados para el client_fd */
     union {
         struct hello_st           hello;
+        struct auth_st            auth;
         struct request_st         request;
         struct copy               copy;
     } client;
@@ -385,13 +420,16 @@ fail:
 // HELLO
 ////////////////////////////////////////////////////////////////////////////////
 
-/** callback del parser utilizado en `read_hello' */
+bool is_auth_on = true;
+
+/** callback que utiliza el parser cada vez que lee un metodo nuevo para elegir alguno de ellos */
 static void
 on_hello_method(struct hello_parser *p, const uint8_t method) {
     uint8_t *selected  = p->data;
 
-    if(SOCKS_HELLO_NOAUTHENTICATION_REQUIRED == method) {
-       *selected = method;
+    if ((!is_auth_on && SOCKS_HELLO_NO_AUTHENTICATION_REQUIRED == method)
+    || (is_auth_on && SOCKS_HELLO_USERNAME_PASSWORD == method)) {
+       *selected = method; // escribe sobre struct hello_st method
     }
 }
 
@@ -403,6 +441,7 @@ hello_read_init(const unsigned state, struct selector_key *key) {
     d->rb                              = &(ATTACHMENT(key)->read_buffer);
     d->wb                              = &(ATTACHMENT(key)->write_buffer);
     d->parser.data                     = &d->method;
+    d->method                          = SOCKS_HELLO_NO_ACCEPTABLE_METHODS;
     d->parser.on_authentication_method = on_hello_method, hello_parser_init(&d->parser);
 }
 
@@ -443,15 +482,9 @@ static unsigned
 hello_process(const struct hello_st* d) {
     unsigned ret = HELLO_WRITE;
 
-    uint8_t m = d->method;
-    // TODO: add more auth methods here?
-    const uint8_t r = (m == SOCKS_HELLO_NO_ACCEPTABLE_METHODS) ? 0xFF : 0x00;
-    if (-1 == hello_marshall(d->wb, r)) {
-        ret  = ERROR;
-    }
-    if (SOCKS_HELLO_NO_ACCEPTABLE_METHODS == m) {
-        ret  = ERROR;
-    }
+    if (-1 == hello_marshall(d->wb, d->method))
+        ret  = ERROR; // no hay lugar suficiente en el buffer de escritura para mandar la rta
+
     return ret;
 }
 
@@ -478,14 +511,149 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
         ret = ERROR;
     } else {
         buffer_read_adv(d->wb, n);
-        // si terminamos de mandar toda la response del HELLO, hacemos transicion HELLO_WRITE -> REQUEST_READ
+        // si terminamos de mandar toda la response del HELLO, hacemos transicion HELLO_WRITE -> AUTH_READ o HELLO_WRITE -> REQUEST_READ
         if (!buffer_can_read(d->wb)) {
             if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
-                ret = REQUEST_READ;
+                // en caso de que haya fallado el handshake del hello, el cliente es el que cerrara la conexion
+                ret = is_auth_on ? AUTH_READ : REQUEST_READ;
             } else {
-                // tambien podia haber un mensaje de error en el buffer, populado por el hello_marshall()
                 ret = ERROR;
             }
+        }
+    }
+
+    return ret;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AUTH
+////////////////////////////////////////////////////////////////////////////////
+
+struct user {
+    char    uname[0xff];
+    char    passwd[0xff];
+};
+
+struct user users[MAX_USERS+1];
+size_t      registered_users = 1;
+
+int socksv5_register_user(char *uname, char *passwd) {
+    if (registered_users > MAX_USERS)
+        return 1; // maximo numero de usuarios alcanzado
+    
+    for (size_t i = 0; i < registered_users; i++) {
+        if (strcmp(uname, users[i].uname) == 0)
+            return -1; // username ya existente
+    }
+
+    // insertamos al final (podrian insertarse en orden alfabetico para mas eficiencia pero al ser pocos es irrelevante)
+    strncpy(users[registered_users].uname, uname, 0xff);
+    strncpy(users[registered_users++].passwd, passwd, 0xff);
+    return 0;
+}
+
+/** inicializa las variables de los estados AUTH_ */
+static void
+auth_init(const unsigned state, struct selector_key *key) {
+    struct auth_st *d       = &ATTACHMENT(key)->client.auth;
+
+    // usuario administrador por defecto, pueden luego editarse los administradores con el protocolo de configuracion
+    strcpy(users[registered_users].uname, "admin");
+    strcpy(users[registered_users].passwd, "admin");
+    registered_users++;
+
+    d->rb                   = &(ATTACHMENT(key)->read_buffer);
+    d->wb                   = &(ATTACHMENT(key)->write_buffer);
+    d->parser.auth          = &d->auth;
+    d->status               = auth_status_failure;
+    auth_parser_init(&d->parser);
+    d->uname                = ATTACHMENT(key)->client_uname;
+}
+
+static unsigned
+auth_process(struct selector_key *key, struct auth_st *d);
+
+/** lee todos los bytes del mensaje de tipo 'auth' e inicia su proceso */
+static unsigned
+auth_read(struct selector_key *key) {
+    struct auth_st *d       = &ATTACHMENT(key)->client.auth;
+
+    buffer *b            = d->rb;
+    unsigned ret         = AUTH_READ;
+    bool error           = false;
+    uint8_t *ptr;
+    size_t count;
+    ssize_t n;
+
+    ptr = buffer_write_ptr(b, &count);
+    n = recv(key->fd, ptr, count, 0);
+    if (n > 0) {
+        buffer_write_adv(b, n);
+        int st = auth_consume(b, &d->parser, &error);
+        if (auth_is_done(st, 0)) {
+            if(SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+                ret = auth_process(key, d);
+            } else {
+                ret = ERROR;
+            }
+        }
+    } else {
+        ret = ERROR;
+    }
+
+    return error ? ERROR : ret;
+}
+
+static unsigned
+auth_process(struct selector_key *key, struct auth_st *d) {
+    unsigned ret            = AUTH_WRITE;
+    
+    for (size_t i = 0; i < registered_users; i++) {
+        if (strncmp(d->auth.uname, users[i].uname, 0xff) == 0 &&
+            strncmp(d->auth.passwd, users[i].passwd, 0xff) == 0) {
+            // sets client uname in struct socks5
+            ATTACHMENT(key)->client_uname = users[i].uname;
+            d->status = auth_status_succeeded;
+            return ret;
+        }
+    }
+    d->status = auth_status_failure;
+    return ret;
+}
+
+static unsigned
+auth_write(struct selector_key *key) {
+    struct auth_st *d       = &ATTACHMENT(key)->client.auth;
+    
+    unsigned ret = AUTH_WRITE;
+    buffer *b    = d->wb;
+    uint8_t *ptr;
+    size_t count;
+    ssize_t n;
+
+    if (-1 == auth_marshall(b, d->status)) {
+        d->status = status_general_SOCKS_server_failure;
+        abort();
+    }
+
+    ptr = buffer_read_ptr(b, &count);
+    n = send(key->fd, ptr, count, MSG_NOSIGNAL);
+    if (n == -1) {
+        ret = ERROR;
+    } else {
+        buffer_read_adv(b, n);
+        if (!buffer_can_read(b)) {
+            if (d->status == auth_status_succeeded) {
+                if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ))
+                    ret = REQUEST_READ;
+                else
+                    ret = ERROR;
+            } else {
+                // close conection
+                ret = ERROR;
+                selector_set_interest_key(key, OP_NOOP);
+            }
+            
         }
     }
 
@@ -786,7 +954,7 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
     return SELECTOR_SUCCESS == ss ? REQUEST_WRITE : ERROR;
 }
 
-void log_request(enum socks_response_status status, const struct sockaddr *clientaddr, const struct sockaddr* originaddr);
+void log_request(enum socks_response_status status, const char *uname, struct request *request, const struct sockaddr *clientaddr, const struct sockaddr* originaddr);
 
 /** escribe todos los bytes de la respuesta al mensaje 'request' */
 static unsigned
@@ -825,8 +993,13 @@ request_write(struct selector_key *key) {
         }
     }
 
-    // TODO: implementar de acuerdo a lo pedido en el man que nos dieron
-    // log_request(d->status, (const struct sockaddr *) &ATTACHMENT(key)->client_addr, (const struct sockaddr *) &ATTACHMENT(key)->origin_addr);
+    log_request(
+        d->status,
+        ATTACHMENT(key)->client_uname,
+        &ATTACHMENT(key)->client.request.request,
+        (const struct sockaddr *) &ATTACHMENT(key)->client_addr,
+        (const struct sockaddr *) &ATTACHMENT(key)->origin_addr
+    );
 
     return ret;
 }
@@ -963,6 +1136,15 @@ static const struct state_definition client_statbl[] = {
         .on_write_ready   = hello_write,
     },
     {
+        .state            = AUTH_READ,
+        .on_arrival       = auth_init,
+        .on_read_ready    = auth_read,
+    },
+    {
+        .state            = AUTH_WRITE,
+        .on_write_ready   = auth_write,
+    },
+    {
         .state            = REQUEST_READ,
         .on_arrival       = request_init,
         .on_departure     = request_read_close,
@@ -1055,4 +1237,50 @@ socksv5_done(struct selector_key* key) {
             close(fds[i]);
         }
     }
+}
+
+/** Registra  el  uso  del  proxy en salida estandar. Una conexión por línea. Los campos de una línea separado por tabs. */
+void log_request(enum socks_response_status status, const char *uname, struct request *request, const struct sockaddr *clientaddr, const struct sockaddr* originaddr) {
+    // ISO-8601 date
+    char buf[50];
+    time_t rawtime;
+    struct tm *ptm;
+
+    if ((rawtime = time(NULL)) != -1 && (ptm = localtime(&rawtime)) != NULL) {
+        if (strftime(buf, 50, "%FT%T", ptm) > 0)
+            printf("%s", buf);
+        else
+            printf("<date error>");
+    } else {
+        printf("<date error>");
+    }
+    // a pesar de que tira error en el editor, anda e indica el offset local con respecto a UTC
+    printf("%s", ptm->__tm_zone);
+    putchar('\t');
+
+    // username del cliente
+    printf("%s", is_auth_on ? uname : "<anonymous>");
+    putchar('\t');
+
+    // tipo de registro
+    putchar('A');
+    putchar('\t');
+
+    // IP y puerto cliente
+    sockaddr_to_human(buf, 50, clientaddr);
+    printf("%s", buf);
+    putchar('\t');
+
+    // IP/FQDN y puerto origin server (destino)
+    if (request->dest_addr_type == socks_req_addrtype_domain) {
+        printf("%s\t%d", request->dest_addr.fqdn, ntohs(request->dest_port));
+    } else {
+        sockaddr_to_human(buf, 50, originaddr);
+        printf("%s", buf);
+    }
+    putchar('\t');
+
+    // status code socks5
+    printf("%d", status);
+    putchar('\n');
 }

@@ -22,13 +22,16 @@
 #include <sys/socket.h>  // socket
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 
-// #include "include/socks5.h"
 #include "include/selector.h"
 #include "include/socks5nio.h"
+#include "include/args.h"
 
-#define DEFAULT_PORT    1080
 #define MAX_CONNECTIONS 512
+
+static const int FD_UNUSED = -1;
+#define IS_FD_USED(fd) ((FD_UNUSED != fd))
 
 static bool done = false;
 
@@ -41,28 +44,28 @@ sigterm_handler(const int signal) {
 static int bind_ipv4_socket(struct in_addr bind_address, unsigned port);
 static int bind_ipv6_socket(struct in6_addr bind_address, unsigned port);
 
+// TODO: Delete once parsing is finished or move to tests
+// static void
+// print_args(struct socks5args args){
+//     printf("Args received:\n");
+        
+//     if(strcmp(args.socks_addr, DEFAULT_SOCKS_ADDR) != 0)
+//         printf("- socks_addr: %s\n", args.socks_addr);
+//     if(args.socks_port != DEFAULT_SOCKS_PORT)
+//         printf("- socks_port: %d\n", args.socks_port);
+//     if(strcmp(args.mng_addr, DEFAULT_CONF_ADDR) != 0)
+//         printf("- mng_addr: %s\n", args.mng_addr);
+//     if(args.mng_port != DEFAULT_CONF_PORT)
+//         printf("- mng_port: %d\n", args.mng_port);
+//     if(args.disectors_enabled != DEFAULT_DISECTORS_ENABLED)
+//         printf("- has_disectors: %s\n", args.disectors_enabled ? "true" : "false");
+// }
+
 int
-main(const int argc, const char **argv) {
-    unsigned port = DEFAULT_PORT;
+main(const int argc, char **argv) {
+    struct socks5args args;
 
-    if(argc == 1) {
-        // utilizamos el default
-    } else if(argc == 2) {
-        // parseamos el segundo argumento a int para tomarlo como puerto
-        char *end     = 0;
-        const long sl = strtol(argv[1], &end, 10);
-
-        if (end == argv[1]|| '\0' != *end 
-           || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
-           || sl < 0 || sl > USHRT_MAX) {
-            fprintf(stderr, "port should be an integer: %s\n", argv[1]);
-            return 1;
-        }
-        port = sl;
-    } else {
-        fprintf(stderr, "Usage: %s <port>\n", argv[0]);
-        return 1;
-    }
+    parse_args(argc, argv, &args);
 
     // no tenemos nada que leer de stdin
     close(0);
@@ -71,22 +74,36 @@ main(const int argc, const char **argv) {
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
 
-    // TODO: aca deberiamos usar la direccion recibamos en la opcion de linea de comandos "-l"
-    struct in_addr address = { .s_addr = htonl(INADDR_ANY) };
-    const int server = bind_ipv4_socket(address, port);
-    if (server < 0) {
-        err_msg = "unable to create IPv4 socket";
-        goto finally;
-    }
-    fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", port);
+    struct in_addr ipv4_addr;
+    int server_v4 = FD_UNUSED;
 
-    // TODO: aca deberiamos usar la direccion recibamos en la opcion de linea de comandos "-l"
-    const int server_v6 = bind_ipv6_socket(in6addr_any, port);
-    if (server_v6 < 0) {
-        err_msg = "unable to create IPv6 socket";
+    struct in6_addr ipv6_addr;
+    int server_v6 = FD_UNUSED;
+
+    if(inet_pton(AF_INET, args.socks_addr, &ipv4_addr) == 1){       // if parsing to ipv4 succeded
+        server_v4 = bind_ipv4_socket(ipv4_addr, args.socks_port);
+        if (server_v4 < 0) {
+            err_msg = "unable to create IPv4 socket";
+            goto finally;
+        }
+        fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
+    }
+
+    char* ipv6_addr_text = args.is_default_socks_addr ? DEFAULT_SOCKS_ADDR_V6 : args.socks_addr;
+
+    if((!IS_FD_USED(server_v4) || args.is_default_socks_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &ipv6_addr) == 1)){
+        server_v6 = bind_ipv6_socket(ipv6_addr, args.socks_port);
+        if (server_v6 < 0) {
+            err_msg = "unable to create IPv6 socket";
+            goto finally;
+        }
+        fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
+    }
+    
+    if(!IS_FD_USED(server_v4) && !IS_FD_USED(server_v6)) {
+        fprintf(stderr, "unable to parse server ip\n");
         goto finally;
     }
-    fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", port);
 
     // registrar sigterm es útil para terminar el programa normalmente.
     // esto ayuda mucho en herramientas como valgrind.
@@ -94,8 +111,13 @@ main(const int argc, const char **argv) {
     signal(SIGINT,  sigterm_handler);
 
     // seteamos los sockets pasivos como no bloqueantes
-    if(selector_fd_set_nio(server) == -1 || selector_fd_set_nio(server_v6) == -1) {
-        err_msg = "getting server socket flags";
+    if(IS_FD_USED(server_v4) && (selector_fd_set_nio(server_v4) == -1)){
+        err_msg = "getting server ipv4 socket flags";
+        goto finally;
+    }
+
+    if(IS_FD_USED(server_v6) && (selector_fd_set_nio(server_v6) == -1)) {
+        err_msg = "getting server ipv6 socket flags";
         goto finally;
     }
 
@@ -124,16 +146,28 @@ main(const int argc, const char **argv) {
         .handle_close      = NULL, // nada que liberar
     };
 
-    ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
-    if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering IPv4 fd";
-        goto finally;
+    if(IS_FD_USED(server_v4)){
+        ss = selector_register(selector, server_v4, &socksv5, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv4 fd";
+            goto finally;
+        }
+    }
+    if(IS_FD_USED(server_v6)){
+        ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv6 fd";
+            goto finally;
+        }
     }
 
-    ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
-    if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering IPv6 fd";
-        goto finally;
+    // register proxy users
+    for (int i = 0; i < MAX_USERS && args.users[i].name != NULL; i++) {
+        int register_status = socksv5_register_user(args.users[i].name, args.users[i].pass);
+        if (register_status == -1)
+            fprintf(stderr, "User already exists: %s\n", args.users[i].name);
+        else if (register_status == 1)
+            fprintf(stderr, "Maximum number of users reached\n");
     }
 
     // termina con un ctrl + C pero dejando un mensajito
@@ -164,15 +198,15 @@ finally:
         ret = 1;
     }
 
-    if(selector != NULL) {
+    if(selector != NULL)
         selector_destroy(selector);
-    }
+
     selector_close();
 
     socksv5_pool_destroy();
 
-    if (server >= 0)
-        close(server);
+    if (server_v4 >= 0)
+        close(server_v4);
 
     if(server_v6 >= 0)
         close(server_v6);

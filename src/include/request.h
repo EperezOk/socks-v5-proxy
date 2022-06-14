@@ -52,7 +52,7 @@ enum socks_addr_type {
 };
 
 union socks_addr {
-    char fqdn[0xff];
+    char fqdn[0xff]; // null terminated
     struct sockaddr_in ipv4;
     struct sockaddr_in6 ipv6;
 };
