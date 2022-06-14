@@ -24,7 +24,6 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-// #include "include/socks5.h"
 #include "include/selector.h"
 #include "include/socks5nio.h"
 #include "include/args.h"
@@ -46,28 +45,27 @@ static int bind_ipv4_socket(struct in_addr bind_address, unsigned port);
 static int bind_ipv6_socket(struct in6_addr bind_address, unsigned port);
 
 // TODO: Delete once parsing is finished or move to tests
-static void
-print_args(struct socks5args args){
-    printf("Args received:\n");
+// static void
+// print_args(struct socks5args args){
+//     printf("Args received:\n");
         
-    if(strcmp(args.socks_addr, DEFAULT_SOCKS_ADDR) != 0)
-        printf("- socks_addr: %s\n", args.socks_addr);
-    if(args.socks_port != DEFAULT_SOCKS_PORT)
-        printf("- socks_port: %d\n", args.socks_port);
-    if(strcmp(args.mng_addr, DEFAULT_CONF_ADDR) != 0)
-        printf("- mng_addr: %s\n", args.mng_addr);
-    if(args.mng_port != DEFAULT_CONF_PORT)
-        printf("- mng_port: %d\n", args.mng_port);
-    if(args.disectors_enabled != DEFAULT_DISECTORS_ENABLED)
-        printf("- has_disectors: %s\n", args.disectors_enabled ? "true" : "false");
-}
+//     if(strcmp(args.socks_addr, DEFAULT_SOCKS_ADDR) != 0)
+//         printf("- socks_addr: %s\n", args.socks_addr);
+//     if(args.socks_port != DEFAULT_SOCKS_PORT)
+//         printf("- socks_port: %d\n", args.socks_port);
+//     if(strcmp(args.mng_addr, DEFAULT_CONF_ADDR) != 0)
+//         printf("- mng_addr: %s\n", args.mng_addr);
+//     if(args.mng_port != DEFAULT_CONF_PORT)
+//         printf("- mng_port: %d\n", args.mng_port);
+//     if(args.disectors_enabled != DEFAULT_DISECTORS_ENABLED)
+//         printf("- has_disectors: %s\n", args.disectors_enabled ? "true" : "false");
+// }
 
 int
 main(const int argc, char **argv) {
     struct socks5args args;
 
     parse_args(argc, argv, &args);
-    print_args(args);
 
     // no tenemos nada que leer de stdin
     close(0);
@@ -161,6 +159,15 @@ main(const int argc, char **argv) {
             err_msg = "registering IPv6 fd";
             goto finally;
         }
+    }
+
+    // register proxy users
+    for (int i = 0; i < MAX_USERS && args.users[i].name != NULL; i++) {
+        int register_status = socksv5_register_user(args.users[i].name, args.users[i].pass);
+        if (register_status == -1)
+            fprintf(stderr, "User already exists: %s\n", args.users[i].name);
+        else if (register_status == 1)
+            fprintf(stderr, "Maximum number of users reached\n");
     }
 
     // termina con un ctrl + C pero dejando un mensajito

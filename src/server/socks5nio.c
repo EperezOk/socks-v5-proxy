@@ -51,8 +51,30 @@ enum socks_v5state {
      */
     HELLO_WRITE,
 
-    // TODO: incorporate these
+    /**
+     * recibe las credenciales (usuario y contraseña, segun RFC 1929) del cliente, e inicia su proceso
+     * 
+     * Intereses:
+     *     - OP_READ sobre client_fd
+     *
+     * Transiciones:
+     *   - AUTH_READ            mientras el mensaje no este completo
+     *   - AUTH_WRITE           cuando está completo
+     *   - ERROR                ante cualquier error (IO/parseo)
+    */
     AUTH_READ,
+
+    /**
+     * informa al cliente si la autenticación fue exitosa o no.
+     *
+     * Intereses:
+     *     - OP_WRITE sobre client_fd
+     *
+     * Transiciones:
+     *   - AUTH_WRITE   mientras queden bytes por enviar
+     *   - REQUEST_READ cuando se enviaron todos los bytes
+     *   - ERROR        ante cualquier error (IO/parseo)
+     */
     AUTH_WRITE,
 
     /**
@@ -512,12 +534,22 @@ struct user {
     char    passwd[0xff];
 };
 
-struct user users[MAX_USERS];
-size_t      registered_users = 0;
+struct user users[MAX_USERS+1];
+size_t      registered_users = 1;
 
-void socksv5_register_user(char *uname, char *passwd) {
+int socksv5_register_user(char *uname, char *passwd) {
+    if (registered_users > MAX_USERS)
+        return 1; // maximo numero de usuarios alcanzado
+    
+    for (size_t i = 0; i < registered_users; i++) {
+        if (strcmp(uname, users[i].uname) == 0)
+            return -1; // username ya existente
+    }
+
+    // insertamos al final (podrian insertarse en orden alfabetico para mas eficiencia pero al ser pocos es irrelevante)
     strncpy(users[registered_users].uname, uname, 0xff);
     strncpy(users[registered_users++].passwd, passwd, 0xff);
+    return 0;
 }
 
 /** inicializa las variables de los estados AUTH_ */
@@ -525,7 +557,7 @@ static void
 auth_init(const unsigned state, struct selector_key *key) {
     struct auth_st *d       = &ATTACHMENT(key)->client.auth;
 
-    // TODO: delete
+    // usuario administrador por defecto, pueden luego editarse los administradores con el protocolo de configuracion
     strcpy(users[registered_users].uname, "admin");
     strcpy(users[registered_users].passwd, "admin");
     registered_users++;
@@ -961,7 +993,6 @@ request_write(struct selector_key *key) {
         }
     }
 
-    // TODO: implementar de acuerdo a lo pedido en el man que nos dieron
     log_request(
         d->status,
         ATTACHMENT(key)->client_uname,

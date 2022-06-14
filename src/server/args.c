@@ -25,8 +25,12 @@ port(const char *s, char* progname) {
 static void
 user(char *s, struct users *user, char* progname) {
     char *p = strchr(s, ':');
+
     if(p == NULL) {
         fprintf(stderr, "%s: missing password for user %s.\n", progname, s);
+        exit(1);
+    } else if (s[0] == ':') {
+        fprintf(stderr, "%s: missing username for password %s.\n", progname, p);
         exit(1);
     } else {
         *p = 0;
@@ -48,11 +52,11 @@ usage(const char *progname) {
     fprintf(stderr,
         "Usage: %s [OPTION]...\n"
         "   -h              Imprime la ayuda y termina.\n"
-        "   -l<SOCKS addr>  Dirección donde servirá el proxy SOCKS.\n"
+        "   -l<SOCKS addr>  Dirección donde servirá el proxy SOCKS. Por defecto escucha en todas las interfaces.\n"
         "   -N              Deshabilita los passwords disectors.\n"
-        "   -L<conf  addr>  Dirección donde servirá el servicio de management. Por defecto escucha solo en loopback\n"
+        "   -L<conf  addr>  Dirección donde servirá el servicio de management. Por defecto escucha solo en loopback.\n"
         "   -p<SOCKS port>  Puerto TCP para conexiones entrantes SOCKS. Por defecto es 1080.\n"
-        "   -P<conf  port>  Puerto SCTP para conexiones entrantes del protocolo de configuracion. Por defecto es 8080.\n"
+        "   -P<conf  port>  Puerto TCP para conexiones entrantes del protocolo de configuracion. Por defecto es 8080.\n"
         "   -u<user>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
         "   -v              Imprime información sobre la versión y termina.\n"
         "\n",
