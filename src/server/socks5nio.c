@@ -398,15 +398,15 @@ fail:
 // HELLO
 ////////////////////////////////////////////////////////////////////////////////
 
-bool isAuthOn = true; // TODO: turn on
+bool is_auth_on = true;
 
 /** callback que utiliza el parser cada vez que lee un metodo nuevo para elegir alguno de ellos */
 static void
 on_hello_method(struct hello_parser *p, const uint8_t method) {
     uint8_t *selected  = p->data;
 
-    if ((!isAuthOn && SOCKS_HELLO_NO_AUTHENTICATION_REQUIRED == method)
-    || (isAuthOn && SOCKS_HELLO_USERNAME_PASSWORD == method)) {
+    if ((!is_auth_on && SOCKS_HELLO_NO_AUTHENTICATION_REQUIRED == method)
+    || (is_auth_on && SOCKS_HELLO_USERNAME_PASSWORD == method)) {
        *selected = method; // escribe sobre struct hello_st method
     }
 }
@@ -493,7 +493,7 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
         if (!buffer_can_read(d->wb)) {
             if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
                 // en caso de que haya fallado el handshake del hello, el cliente es el que cerrara la conexion
-                ret = isAuthOn ? AUTH_READ : REQUEST_READ;
+                ret = is_auth_on ? AUTH_READ : REQUEST_READ;
             } else {
                 ret = ERROR;
             }
@@ -1228,7 +1228,7 @@ void log_request(enum socks_response_status status, const char *uname, struct re
     putchar('\t');
 
     // username del cliente
-    printf("%s", isAuthOn ? uname : "<anonymous>");
+    printf("%s", is_auth_on ? uname : "<anonymous>");
     putchar('\t');
 
     // tipo de registro

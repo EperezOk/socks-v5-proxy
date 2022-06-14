@@ -134,7 +134,5 @@ auth_marshall(buffer *b, const enum auth_response_status status) {
     buffer_write(b, 0x01); // version
     buffer_write(b, status); // 00 ok, 01 invalid auth
 
-    buffer_write_adv(b, 2);
-
     return 2;
 }
