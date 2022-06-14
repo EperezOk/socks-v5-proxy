@@ -21,13 +21,3 @@ clean:
 	rm -rf $(OBJECTS) $(TARGET_SERVER) $(TARGET_CLIENT)
 
 .PHONY: all clean
-
-# TODO: DELETE FROM HERE ONCE TRANSPARENT PROXY IS DELETED
-SOURCES_PROXY := $(wildcard ./transp-proxy/*.c)
-OBJECTS_PROXY := trnsProxy.o $(SOURCES_PROXY:.c=.o)
-
-proxy: $(OBJECTS_PROXY)
-	$(CC) $(CFLAGS) $^ -o ../$@
-
-cleanp:
-	rm -rf $(OBJECTS_PROXY) ../proxy;
