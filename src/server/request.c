@@ -86,10 +86,10 @@ dstaddr(const uint8_t c, struct request_parser *p) {
 
     switch (p->request->dest_addr_type) {
         case socks_req_addrtype_ipv4:
-            ((uint8_t *)&(p->request->dest_addr.ipv4.sin_addr))[p->i++] = c;  // ACA NO SE VE EN EL VIDEO CREO Q ES ASI AL FINAL
+            ((uint8_t *)&(p->request->dest_addr.ipv4.sin_addr))[p->i++] = c;
             break;
         case socks_req_addrtype_ipv6:
-            ((uint8_t *)&(p->request->dest_addr.ipv6.sin6_addr))[p->i++] = c;  // ACA NO SE VE EN EL VIDEO CREO Q ES ASI AL FINAL
+            ((uint8_t *)&(p->request->dest_addr.ipv6.sin6_addr))[p->i++] = c;
             break;
         case socks_req_addrtype_domain:
             p->request->dest_addr.fqdn[p->i++] = c;
@@ -201,7 +201,7 @@ request_marshall(buffer *b, const enum socks_response_status status) {
     buff[0] = 0x05;
     buff[1] = status;
     buff[2] = 0x00;
-    // TODO: extender a IPv6 aca?
+    // TODO: ????
     buff[3] = socks_req_addrtype_ipv4;
     buff[4] = 0x00;
     buff[5] = 0x00;
@@ -213,13 +213,6 @@ request_marshall(buffer *b, const enum socks_response_status status) {
     buffer_write_adv(b, 10);
     return 10;
 }
-
-// Unused in NIO version
-/*
-cmd_resolve(struct request* request, struct sockaddr **originaddr, socklen_t *originlen, int *domain) {
-    // ....................
-}
-*/
 
 #include <errno.h>
 

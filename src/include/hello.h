@@ -6,8 +6,6 @@
 
 #include "../include/buffer.h"
 
-static const uint8_t METHOD_NO_AUTHENTICATION_REQUIRED = 0x00;
-static const uint8_t METHOD_NO_ACCEPTABLE_METHODS = 0x00;
 
 /**
 	The client connects to the server, and sends a version
@@ -42,7 +40,7 @@ struct hello_parser {
 		(struct hello_parser *parser, const uint8_t method);
 
 	/** permite al usuario del parser almacenar sus datos */
-	void *data;
+	void *data; // aca ira el metodo seleccionado, esta vinculado al method de struct hello_st
 	/****** zona privada ******/
 	enum hello_state state;
 	/* metodos que faltan por leer */
@@ -85,14 +83,9 @@ hello_error(const struct hello_parser *p);
 /* Libera recursos internos del parser */
 void hello_parser_close(struct hello_parser *p);
 
-static const uint8_t SOCKS_HELLO_NOAUTHENTICATION_REQUIRED = 0x00;	/* Faltaria definir un AUTHENTICATION REQUIRED que seria 0x01 */
-/*
- * If the selected METHOD is X'FF', none of the methods listed by the
- * client are acceptable, and the client MUST close the connection.
- */
+static const uint8_t SOCKS_HELLO_NO_AUTHENTICATION_REQUIRED = 0x00;
+static const uint8_t SOCKS_HELLO_USERNAME_PASSWORD = 0x02;
 static const uint8_t SOCKS_HELLO_NO_ACCEPTABLE_METHODS = 0xFF;
-
-
 /*
  * serializa en buff una respuesta al hello.
  * 
