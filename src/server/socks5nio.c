@@ -15,6 +15,7 @@
 #include "../include/hello.h"
 #include "../include/request.h"
 #include "../include/auth.h"
+#include "../include/disector.h"
 #include "../include/buffer.h"
 
 #include "../include/stm.h"
@@ -263,6 +264,8 @@ struct socks5 {
         struct copy               copy;
     } orig;
 
+    struct disector_parser        dp;
+
     /** buffers para ser usados read_buffer, write_buffer */
     // Los mismos se van reusando para todos los estados (van quedando limpios luego de cada transicion), y deberian tener al menos 10 bytes de tamaño para poder almacenar una request_marshall() completa.
     uint8_t raw_buff_a[1024], raw_buff_b[1024];
@@ -421,6 +424,7 @@ fail:
 ////////////////////////////////////////////////////////////////////////////////
 
 bool is_auth_on = true;
+size_t registered_users = 0;
 
 /** callback que utiliza el parser cada vez que lee un metodo nuevo para elegir alguno de ellos */
 static void
@@ -443,6 +447,9 @@ hello_read_init(const unsigned state, struct selector_key *key) {
     d->parser.data                     = &d->method;
     d->method                          = SOCKS_HELLO_NO_ACCEPTABLE_METHODS;
     d->parser.on_authentication_method = on_hello_method, hello_parser_init(&d->parser);
+
+    if (registered_users == 0)
+        is_auth_on = false; // turn off authentication method
 }
 
 static unsigned
@@ -534,11 +541,10 @@ struct user {
     char    passwd[0xff];
 };
 
-struct user users[MAX_USERS+1];
-size_t      registered_users = 1;
+struct user users[MAX_USERS];
 
 int socksv5_register_user(char *uname, char *passwd) {
-    if (registered_users > MAX_USERS)
+    if (registered_users >= MAX_USERS)
         return 1; // maximo numero de usuarios alcanzado
     
     for (size_t i = 0; i < registered_users; i++) {
@@ -556,12 +562,6 @@ int socksv5_register_user(char *uname, char *passwd) {
 static void
 auth_init(const unsigned state, struct selector_key *key) {
     struct auth_st *d       = &ATTACHMENT(key)->client.auth;
-
-    // usuario administrador por defecto, pueden luego editarse los administradores con el protocolo de configuracion
-    strcpy(users[registered_users].uname, "admin");
-    strcpy(users[registered_users].passwd, "admin");
-    registered_users++;
-
     d->rb                   = &(ATTACHMENT(key)->read_buffer);
     d->wb                   = &(ATTACHMENT(key)->write_buffer);
     d->parser.auth          = &d->auth;
@@ -1023,6 +1023,9 @@ copy_init(const unsigned state, struct selector_key *key) {
     d->wb          = &ATTACHMENT(key)->read_buffer;
     d->duplex      = OP_READ | OP_WRITE;
     d->other       = &ATTACHMENT(key)->client.copy;
+
+    // init disector
+    disector_parser_init(&ATTACHMENT(key)->dp);
 }
 
 /** actualiza los intereses en el selector segun el estado del copy */
@@ -1095,6 +1098,8 @@ copy_w(struct selector_key *key) {
     struct copy *d = copy_ptr(key);
     assert(*d->fd == key->fd);
 
+    struct disector_parser *dp = &ATTACHMENT(key)->dp;
+
     size_t size;
     ssize_t n;
     buffer *b = d->wb;
@@ -1110,10 +1115,21 @@ copy_w(struct selector_key *key) {
             d->other->duplex &= ~OP_READ;
         }
     } else {
+        // TODO: agregar flag para prender y apagar el sniffeo
+        // si estamos esperando el usuario y pass, miramos lo que escribe cliente sobre origin, y si estamos esperando la response al reves
+        if (dp->state != disector_incompatible
+        && ((dp->state < disector_response && dp->state >= disector_user && key->fd == ATTACHMENT(key)->origin_fd)
+        || ((dp->state == disector_response || dp->state == disector_wait_pop) && key->fd == ATTACHMENT(key)->client_fd))) {
+            const enum disector_state st = disector_consume(dp, ptr, n);
+            if (st == disector_done) {
+                // TODO: formatear apropiadamente
+                disector_parser_reset(dp);
+                printf("CREDENCIAL ENCONTRADA\nUser: %s\nPassword:%s\n", dp->disector.user, dp->disector.pass);
+            }
+        }
         buffer_read_adv(b, n);
     }
 
-    // ¿deberia actualizar intereses en el selector?
     copy_compute_interests(key->s, d);
     copy_compute_interests(key->s, d->other);
 

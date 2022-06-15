@@ -201,7 +201,7 @@ request_marshall(buffer *b, const enum socks_response_status status) {
     buff[0] = 0x05;
     buff[1] = status;
     buff[2] = 0x00;
-    // TODO: ????
+    // Los campos siguientes no son relevantes para el metodo CONNECT, se dejan en 0
     buff[3] = socks_req_addrtype_ipv4;
     buff[4] = 0x00;
     buff[5] = 0x00;
