@@ -246,6 +246,8 @@ struct socks5 {
     struct sockaddr_storage       origin_addr;
     socklen_t                     origin_addr_len;
     int                           origin_domain;
+    enum    socks_addr_type       dest_addr_type;
+    union   socks_addr            dest_addr;
 
     /** maquinas de estados */
     struct state_machine          stm;
@@ -1001,12 +1003,24 @@ request_write(struct selector_key *key) {
         (const struct sockaddr *) &ATTACHMENT(key)->origin_addr
     );
 
+    // guardamos estos valores que necesitaremos luego para logear en la etapa posterior
+    memcpy(&ATTACHMENT(key)->dest_addr, &ATTACHMENT(key)->client.request.request.dest_addr, sizeof(union socks_addr));
+    ATTACHMENT(key)->dest_addr_type = ATTACHMENT(key)->client.request.request.dest_addr_type;
+
     return ret;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // COPY
 ////////////////////////////////////////////////////////////////////////////////
+
+bool is_disector_on = true;
+
+// TODO: llamar desde server.c si pasan -N y desde el protocolo de monitoreo
+// static void
+// toggle_disector(bool to) {
+//     is_disector_on = to;
+// }
 
 static void
 copy_init(const unsigned state, struct selector_key *key) {
@@ -1092,6 +1106,8 @@ copy_r(struct selector_key *key) {
     return ret;
 }
 
+void log_credentials(const char *user, const char *pass, const char *uname, enum socks_addr_type addr_type, union socks_addr *addr, const struct sockaddr* originaddr);
+
 /** escribe bytes encolados */
 static unsigned
 copy_w(struct selector_key *key) {
@@ -1115,16 +1131,20 @@ copy_w(struct selector_key *key) {
             d->other->duplex &= ~OP_READ;
         }
     } else {
-        // TODO: agregar flag para prender y apagar el sniffeo
-        // si estamos esperando el usuario y pass, miramos lo que escribe cliente sobre origin, y si estamos esperando la response al reves
-        if (dp->state != disector_incompatible
+        // si estamos esperando el usuario y pass, miramos lo que escribe cliente sobre origin, y si estamos esperando la response o que se inicie una conexion POP3, al reves
+        if (is_disector_on && dp->state != disector_incompatible
         && ((dp->state < disector_response && dp->state >= disector_user && key->fd == ATTACHMENT(key)->origin_fd)
         || ((dp->state == disector_response || dp->state == disector_wait_pop) && key->fd == ATTACHMENT(key)->client_fd))) {
             const enum disector_state st = disector_consume(dp, ptr, n);
             if (st == disector_done) {
-                // TODO: formatear apropiadamente
+                log_credentials(dp->disector.user,
+                    dp->disector.pass,
+                    ATTACHMENT(key)->client_uname,
+                    ATTACHMENT(key)->dest_addr_type,
+                    &ATTACHMENT(key)->dest_addr,
+                    (const struct sockaddr *) &ATTACHMENT(key)->origin_addr
+                );
                 disector_parser_reset(dp);
-                printf("CREDENCIAL ENCONTRADA\nUser: %s\nPassword:%s\n", dp->disector.user, dp->disector.pass);
             }
         }
         buffer_read_adv(b, n);
@@ -1255,10 +1275,8 @@ socksv5_done(struct selector_key* key) {
     }
 }
 
-/** Registra  el  uso  del  proxy en salida estandar. Una conexión por línea. Los campos de una línea separado por tabs. */
-void log_request(enum socks_response_status status, const char *uname, struct request *request, const struct sockaddr *clientaddr, const struct sockaddr* originaddr) {
-    // ISO-8601 date
-    char buf[50];
+// ISO-8601 date
+static void log_current_local_date(char *buf) {
     time_t rawtime;
     struct tm *ptm;
 
@@ -1272,6 +1290,24 @@ void log_request(enum socks_response_status status, const char *uname, struct re
     }
     // a pesar de que tira error en el editor, anda e indica el offset local con respecto a UTC
     printf("%s", ptm->__tm_zone);
+}
+
+// IP/FQDN y puerto origin server (destino)
+static void log_destination(char *buf, const struct sockaddr* originaddr, enum socks_addr_type addr_type, union socks_addr *addr) {
+    if (addr_type == socks_req_addrtype_domain) {
+        in_port_t port = originaddr->sa_family == AF_INET ? ((struct sockaddr_in *) originaddr)->sin_port : ((struct sockaddr_in6 *) originaddr)->sin6_port;
+        printf("%s\t%d", addr->fqdn, ntohs(port));
+    } else {
+        sockaddr_to_human(buf, 50, originaddr);
+        printf("%s", buf);
+    }
+}
+
+/** Registra  el  uso  del  proxy en salida estandar. Una conexión por línea. Los campos de una línea separado por tabs. */
+void log_request(enum socks_response_status status, const char *uname, struct request *request, const struct sockaddr *clientaddr, const struct sockaddr* originaddr) {
+    char buf[50];
+    
+    log_current_local_date(buf);
     putchar('\t');
 
     // username del cliente
@@ -1287,16 +1323,42 @@ void log_request(enum socks_response_status status, const char *uname, struct re
     printf("%s", buf);
     putchar('\t');
 
-    // IP/FQDN y puerto origin server (destino)
-    if (request->dest_addr_type == socks_req_addrtype_domain) {
-        printf("%s\t%d", request->dest_addr.fqdn, ntohs(request->dest_port));
-    } else {
-        sockaddr_to_human(buf, 50, originaddr);
-        printf("%s", buf);
-    }
+    // IP/FQDN destino
+    log_destination(buf, originaddr, request->dest_addr_type, &request->dest_addr);
     putchar('\t');
 
     // status code socks5
     printf("%d", status);
+    putchar('\n');
+}
+
+void log_credentials(const char *user, const char *pass, const char *uname, enum socks_addr_type addr_type, union socks_addr *addr, const struct sockaddr* originaddr) {
+    char buf[50];
+
+    log_current_local_date(buf);
+    putchar('\t');
+
+    // username del cliente
+    printf("%s", is_auth_on ? uname : "<anonymous>");
+    putchar('\t');
+
+    // tipo de registro
+    putchar('P');
+    putchar('\t');
+
+    // protocolo sniffeado
+    printf("POP3");
+    putchar('\t');
+
+    // IP/FQDN destino
+    log_destination(buf, originaddr, addr_type, addr);
+    putchar('\t');
+
+    // usuario descubierto
+    printf("%s", user);
+    putchar('\t');
+
+    // contraseña descubierta
+    printf("%s", pass);
     putchar('\n');
 }

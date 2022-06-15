@@ -170,6 +170,7 @@ main(const int argc, char **argv) {
             fprintf(stderr, "Maximum number of users reached\n");
     }
 
+    printf("\n----------------------- LOGS -----------------------\n\n");
     // termina con un ctrl + C pero dejando un mensajito
     while(!done) {
         err_msg = NULL;
