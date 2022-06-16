@@ -154,7 +154,7 @@ main(const int argc, char **argv) {
     }
 
     if (!args.disectors_enabled)
-        toggle_disector(false);
+        socksv5_toggle_disector(false);
 
     printf("\n----------------------- LOGS -----------------------\n\n");
     // termina con un ctrl + C pero dejando un mensajito

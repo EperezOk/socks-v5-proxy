@@ -132,13 +132,14 @@ fail:
 ////////////////////////////////////////////////////////////////////////////////
 
 struct admin {
-    char    uname[0xff];
-    char    token[0x10];
+    char    uname[0xff];    // null terminated
+    char    token[0x10];    // 16 bytes fijos, no-null-terminated
 };
 
 /** el admins[0] sera creado apenas se corra el servidor, pasando el token con el parametro adecuado */
 struct admin admins[MAX_ADMINS]; // TODO: agregar admin root desde el server.c
 size_t registered_admins = 0;
+char *default_admin_uname = "root";
 
 // TODO: funcion a llamarse en el monitor_process()
 int monitor_register_admin(char *uname, char *token) {
@@ -154,9 +155,25 @@ int monitor_register_admin(char *uname, char *token) {
     }
 
     // insertamos al final (podrian insertarse en orden alfabetico para mas eficiencia pero al ser pocos es irrelevante)
-    strncpy(admins[registered_admins].uname, registered_admins == 0 ? "root" : uname, 0xff);
+    strncpy(admins[registered_admins].uname, registered_admins == 0 ? default_admin_uname : uname, 0xff);
     strncpy(admins[registered_admins++].token, token, 0x10);
     return 0;
+}
+
+int monitor_unregister_admin(char *uname) {
+    if (strcmp(default_admin_uname, uname) == 0)
+        return -1; // no se puede remover el admin root
+
+    for (size_t i = 1; i < registered_admins; i++) {
+        if (strcmp(uname, admins[i].uname) == 0) {
+            // movemos los elementos para tapar el hueco que pudo haber quedado
+            if (i + 1 < registered_admins)
+                memmove(&admins[i], &admins[i+1], sizeof(struct admin) * (registered_admins - (i + 1)));
+            registered_admins--;
+            return 0;
+        }
+    }
+    return -1;  // usuario no encontrado
 }
 
 static bool
@@ -217,15 +234,39 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
     // TODO: pasar el token
     if (!monitor_is_admin(d->parser.token)) {
         // setear status invalid auth
-        return;
+        return 0;
     }
 
     // TODO: implementar con los campos del parser
     switch (d->method) {
         case GET:
             switch (d->target) {
+                case current_connections: {
+                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
+                    socksv5_current_connections();
+                    break;
+                }
+                case historic_connections: {
+                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
+                    socksv5_historic_connections();
+                    break;
+                }
                 case bytes_transferred: {
-
+                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
+                    socksv5_bytes_transferred();
+                    break;
+                }
+                case list_proxy_users: {
+                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
+                    char *usernames[MAX_USERS]; 
+                    size_t size = socksv5_get_users(usernames);
+                    break;
+                }
+                case list_admins: {
+                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
+                    for (size_t i = 0; i < registered_admins; i++) {
+                        admins[i].uname;
+                    }
                     break;
                 }
                 default: {
@@ -236,8 +277,29 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
             break;
         case CONFIG:
             switch (d->target) {
-                case disector_on: {
-
+                case disector_toggle: {
+                    socksv5_toggle_disector(/*value del parser*/);
+                    break;
+                }
+                case add_proxy_user: {
+                    socksv5_register_user(/*values del parser*/);
+                    break;
+                }
+                case remove_proxy_user: {
+                    socksv5_unregister_user(/*value del parser*/);
+                    break;
+                }
+                case add_admin: {
+                    monitor_register_admin(/*values del parser*/);
+                    break;
+                }
+                case remove_admin: {
+                    monitor_unregister_admin(/*values del parser*/);
+                    break;
+                }
+                default: {
+                    // TODO: setear en parser status invalid target
+                    break;
                 }
             }
             break;

@@ -24,6 +24,23 @@
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
+// Estadisticas del servidor proxy a ser consultadas por el protocolo de monitoreo
+size_t historic_connections = 0;
+size_t current_connections  = 0;
+size_t bytes_transferred    = 0;
+
+size_t socksv5_historic_connections() {
+    return historic_connections;
+}
+
+size_t socksv5_current_connections() {
+    return current_connections;
+}
+
+size_t socksv5_bytes_transferred() {
+    return bytes_transferred;
+}
+
 /** maquina de estados general */
 enum socks_v5state {
     /**
@@ -539,8 +556,8 @@ hello_write(struct selector_key *key) { // key corresponde a un client_fd
 ////////////////////////////////////////////////////////////////////////////////
 
 struct user {
-    char    uname[0xff];
-    char    passwd[0xff];
+    char    uname[0xff];    // null terminated
+    char    passwd[0xff];   // null terminated
 };
 
 struct user users[MAX_USERS];
@@ -558,6 +575,26 @@ int socksv5_register_user(char *uname, char *passwd) {
     strncpy(users[registered_users].uname, uname, 0xff);
     strncpy(users[registered_users++].passwd, passwd, 0xff);
     return 0;
+}
+
+int socksv5_unregister_user(char *uname) {
+    for (size_t i = 0; i < registered_users; i++) {
+        if (strcmp(uname, users[i].uname) == 0) {
+            // movemos los elementos para tapar el hueco que pudo haber quedado
+            if (i + 1 < registered_users)
+                memmove(&users[i], &users[i+1], sizeof(struct user) * (registered_users - (i + 1)));
+            registered_users--;
+            return 0;
+        }
+    }
+    return -1;  // usuario no encontrado
+}
+
+size_t socksv5_get_users(char *unames[MAX_USERS]) {
+    for (size_t i = 0; i < registered_users; i++) {
+        unames[i] = users[i].uname;
+    }
+    return registered_users;
 }
 
 /** inicializa las variables de los estados AUTH_ */
@@ -1007,6 +1044,9 @@ request_write(struct selector_key *key) {
     memcpy(&ATTACHMENT(key)->dest_addr, &ATTACHMENT(key)->client.request.request.dest_addr, sizeof(union socks_addr));
     ATTACHMENT(key)->dest_addr_type = ATTACHMENT(key)->client.request.request.dest_addr_type;
 
+    historic_connections += 1;
+    current_connections  += 1;
+
     return ret;
 }
 
@@ -1017,7 +1057,7 @@ request_write(struct selector_key *key) {
 bool is_disector_on = true;
 
 void
-toggle_disector(bool to) {
+socksv5_toggle_disector(bool to) {
     is_disector_on = to;
 }
 
@@ -1147,6 +1187,7 @@ copy_w(struct selector_key *key) {
             }
         }
         buffer_read_adv(b, n);
+        bytes_transferred += n;
     }
 
     copy_compute_interests(key->s, d);
@@ -1272,6 +1313,8 @@ socksv5_done(struct selector_key* key) {
             close(fds[i]);
         }
     }
+
+    current_connections -= 1;
 }
 
 // ISO-8601 date
