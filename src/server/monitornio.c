@@ -176,6 +176,15 @@ int monitor_unregister_admin(char *uname) {
     return -1;  // usuario no encontrado
 }
 
+static uint16_t monitor_get_admins(char unames[MAX_ADMINS * 0xff]) {
+    uint16_t dlen = 0;
+    for (size_t i = 0; i < registered_admins; i++) {
+        strcpy(unames[dlen], admins[i].uname);
+        dlen += strlen(admins[i].uname) + 1; // incluimos el \0
+    }
+    return dlen;
+}
+
 static bool
 monitor_is_admin(char *token) {
     for (size_t i = 0; i < registered_admins; i++) {
@@ -220,21 +229,23 @@ monitor_read(struct selector_key *key) {
         // TODO: llamada a funciones del parser
         int st = monitor_consume(b, &d->parser, &error);
         if (monitor_is_done(st, 0)) {
-            if (monitor_process(key, d) == -1) // solo debe retornar -1 en caso de error terminal, si es un error en la request se pasa a la escritura
-                monitor_done(key);
-            else
-                selector_set_interest_key(key, OP_WRITE);
+            monitor_process(key, d);    // ejecuta la accion pedida y escribe la response en el buffer
+            selector_set_interest_key(key, OP_WRITE);   // pasamos al monitor_write() cuando podamos escribir
         }
     }
 }
 
 // solo debe retornar -1 en caso de error terminal en la conexion, si es un error en la request se pasa al paso de escritura (y retorno 0 por ej)
-static int
+static void
 monitor_process(struct selector_key *key, struct monitor_st *d) {
+    uint8_t *data;
+    uint16_t dlen;
+    int error_response = 0;
+
     // TODO: pasar el token
     if (!monitor_is_admin(d->parser.token)) {
         // setear status invalid auth
-        return 0;
+        return;
     }
 
     // TODO: implementar con los campos del parser
@@ -242,31 +253,33 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
         case GET:
             switch (d->target) {
                 case current_connections: {
-                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
-                    socksv5_current_connections();
+                    size_t cc = socksv5_current_connections();
+                    data = &cc;
+                    dlen = sizeof(cc);
                     break;
                 }
                 case historic_connections: {
-                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
-                    socksv5_historic_connections();
+                    size_t hc = socksv5_historic_connections();
+                    data = &hc;
+                    dlen = sizeof(hc);
                     break;
                 }
                 case bytes_transferred: {
-                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
-                    socksv5_bytes_transferred();
+                    size_t bt = socksv5_bytes_transferred();
+                    data = &bt;
+                    dlen = sizeof(bt);
                     break;
                 }
                 case list_proxy_users: {
-                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
-                    char *usernames[MAX_USERS]; 
-                    size_t size = socksv5_get_users(usernames);
+                    char usernames[MAX_USERS * 0xff];
+                    dlen = socksv5_get_users(usernames);
+                    data = usernames;
                     break;
                 }
                 case list_admins: {
-                    // TODO: escribir en el parser o pasar al request marshall el valor para que lo ponga en la response
-                    for (size_t i = 0; i < registered_admins; i++) {
-                        admins[i].uname;
-                    }
+                    char usernames[MAX_USERS * 0xff];
+                    dlen = monitor_get_admins(usernames);
+                    data = usernames;
                     break;
                 }
                 default: {
@@ -276,25 +289,28 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
             }
             break;
         case CONFIG:
+            data = NULL;
+            dlen = 1;
+
             switch (d->target) {
                 case disector_toggle: {
                     socksv5_toggle_disector(/*value del parser*/);
                     break;
                 }
                 case add_proxy_user: {
-                    socksv5_register_user(/*values del parser*/);
+                    error_response = socksv5_register_user(/*values del parser*/);
                     break;
                 }
                 case remove_proxy_user: {
-                    socksv5_unregister_user(/*value del parser*/);
+                    error_response = socksv5_unregister_user(/*value del parser*/);
                     break;
                 }
                 case add_admin: {
-                    monitor_register_admin(/*values del parser*/);
+                    error_response = monitor_register_admin(/*values del parser*/);
                     break;
                 }
                 case remove_admin: {
-                    monitor_unregister_admin(/*values del parser*/);
+                    error_response = monitor_unregister_admin(/*values del parser*/);
                     break;
                 }
                 default: {
@@ -308,7 +324,10 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
             break;
     }
 
-    if (-1 == monitor_marshall(d->wb, d->status))
+    if (error_response != 0)
+        // TODO: setear status invalid data
+
+    if (-1 == monitor_marshall(d->wb, d->status, dlen, data))
         abort(); // el buffer tiene que ser mas grande en la variable
 }
 

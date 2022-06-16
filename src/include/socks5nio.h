@@ -28,6 +28,6 @@ void socksv5_pool_destroy(void);
 size_t socksv5_historic_connections();
 size_t socksv5_current_connections();
 size_t socksv5_bytes_transferred();
-size_t socksv5_get_users(char *unames[MAX_USERS]);
+uint16_t socksv5_get_users(char unames[MAX_USERS * 0xff]);
 
 #endif
