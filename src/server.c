@@ -44,23 +44,6 @@ sigterm_handler(const int signal) {
 static int bind_ipv4_socket(struct in_addr bind_address, unsigned port);
 static int bind_ipv6_socket(struct in6_addr bind_address, unsigned port);
 
-// TODO: Delete once parsing is finished or move to tests
-// static void
-// print_args(struct socks5args args){
-//     printf("Args received:\n");
-        
-//     if(strcmp(args.socks_addr, DEFAULT_SOCKS_ADDR) != 0)
-//         printf("- socks_addr: %s\n", args.socks_addr);
-//     if(args.socks_port != DEFAULT_SOCKS_PORT)
-//         printf("- socks_port: %d\n", args.socks_port);
-//     if(strcmp(args.mng_addr, DEFAULT_CONF_ADDR) != 0)
-//         printf("- mng_addr: %s\n", args.mng_addr);
-//     if(args.mng_port != DEFAULT_CONF_PORT)
-//         printf("- mng_port: %d\n", args.mng_port);
-//     if(args.disectors_enabled != DEFAULT_DISECTORS_ENABLED)
-//         printf("- has_disectors: %s\n", args.disectors_enabled ? "true" : "false");
-// }
-
 int
 main(const int argc, char **argv) {
     struct socks5args args;
@@ -169,6 +152,9 @@ main(const int argc, char **argv) {
         else if (register_status == 1)
             fprintf(stderr, "Maximum number of users reached\n");
     }
+
+    if (!args.disectors_enabled)
+        toggle_disector(false);
 
     printf("\n----------------------- LOGS -----------------------\n\n");
     // termina con un ctrl + C pero dejando un mensajito

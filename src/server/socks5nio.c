@@ -1016,11 +1016,10 @@ request_write(struct selector_key *key) {
 
 bool is_disector_on = true;
 
-// TODO: llamar desde server.c si pasan -N y desde el protocolo de monitoreo
-// static void
-// toggle_disector(bool to) {
-//     is_disector_on = to;
-// }
+void
+toggle_disector(bool to) {
+    is_disector_on = to;
+}
 
 static void
 copy_init(const unsigned state, struct selector_key *key) {
