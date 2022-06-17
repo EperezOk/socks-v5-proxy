@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
 
 #define DEFAULT_CONF_ADDR           "127.0.0.1"
 #define DEFAULT_CONF_PORT           8080
@@ -73,12 +75,17 @@ struct client_request_args {
     union data      data;
 };
 
+enum ip_version {
+    ipv4 = 0x04,
+    ipv6 = 0x06
+};
+
 /**
  * Interpreta la linea de comandos (argc, argv) llenando
  * args con defaults o la seleccion humana. Puede cortar
  * la ejecución.
  */
 void 
-parse_args(const int argc, char **argv, struct client_request_args *args);
+parse_args(const int argc, char **argv, struct client_request_args *args, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version);
 
 #endif

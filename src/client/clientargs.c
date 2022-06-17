@@ -7,7 +7,7 @@
 
 #include "../include/clientargs.h"
 
-/*
+
 static unsigned short
 port(const char *s, char* progname) {
     char *end     = 0;
@@ -18,11 +18,22 @@ port(const char *s, char* progname) {
         || sl < 0 || sl > USHRT_MAX) {
         fprintf(stderr, "%s: invalid port %s, should be an integer in the range of 1-65536.\n", progname, s);
         exit(1);
-        return 1;
     }
     return (unsigned short)sl;
 }
 
+static size_t
+username(const char *src_username, char *dest_username, char* progname){
+    size_t username_len;
+    if((username_len = strlen(src_username)) > USERNAME_SIZE){
+        fprintf(stderr, "%s: invalid username length (%zu), should be of at most %d characters.\n", progname, username_len, USERNAME_SIZE);
+        exit(1);
+    }
+    memcpy(dest_username, src_username, username_len);
+    return username_len;
+}
+
+/*
 static void
 user(char *s, struct users *user, char* progname) {
     char *p = strchr(s, ':');
@@ -52,7 +63,7 @@ version(void) {
 static void
 usage(const char *progname) {
     fprintf(stderr,
-        "Usage: %s [OPTIONS] [DESTINATION] [PORT]...\n"
+        "Usage: %s [OPTIONS] [DESTINATION] [PORT] [TOKEN]...\n"
         "Options:\n"
         "-h                 imprime los comandos del programa.\n"
         "-c                 imprime la cantidad de conexiones concurrentes del server.\n"
@@ -80,20 +91,10 @@ set_get_data(struct client_request_args *args) {
 }
 
 void 
-parse_args(const int argc, char **argv, struct client_request_args *args) {
+parse_args(const int argc, char **argv, struct client_request_args *args, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version) {
     memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users, ademas de poner los campos opcionales en 0 (y el separator)
-
-    /*
-    args->socks_addr = DEFAULT_SOCKS_ADDR;
-    args->socks_port = DEFAULT_SOCKS_PORT;
-    args->is_default_socks_addr = true;         // Pongo los valores default. Si recibo un parametro con un valor los cambio abajo
-
-    args->mng_addr   = DEFAULT_CONF_ADDR;
-    args->mng_port   = DEFAULT_CONF_PORT;
-    args->is_default_mng_addr = true;
-
-    args->disectors_enabled = true;
-    */
+    memset(sin4, 0, sizeof(*sin4));
+    memset(sin6, 0, sizeof(*sin6));
 
     int c;
 
@@ -140,11 +141,13 @@ parse_args(const int argc, char **argv, struct client_request_args *args) {
                 // Get list of proxy users
                 set_get_data(args);
                 args->target.get_target = proxy_users_list;
+                // TODO: Show list of proxy users
                 break;
             case 'A':
                 // Get list of admin users
                 set_get_data(args);
                 args->target.get_target = admin_users_list;
+                // TODO: Show list of admin users
                 break;
             case 'n':
                 // Turns on password disector
@@ -158,7 +161,7 @@ parse_args(const int argc, char **argv, struct client_request_args *args) {
                 args->method = config;
                 args->target.config_target = toggle_disector;
                 args->dlen = 1;
-                args->data.disector_data_params = disector_on;
+                args->data.disector_data_params = disector_off;
                 break;
             case 'u':
                 // Adds proxy user
@@ -174,48 +177,20 @@ parse_args(const int argc, char **argv, struct client_request_args *args) {
                 // Deletes proxy user
                 args->method = config;
                 args->target.config_target = del_proxy_user;
+                // TODO: Add checking of username length and throw error if exceeds USERNAME_SIZE
+                args->dlen = username(optarg, args->data.user, argv[0]);
                 break;
             case 'D':
                 // Deletes admin user
                 args->method = config;
                 args->target.config_target = del_admin_user;
+                // TODO: Add checking of username length and throw error if exceeds USERNAME_SIZE
+                args->dlen = username(optarg, args->data.user, argv[0]);
                 break;
             case 'v':
                 // Prints program version
                 version();
                 break;
-                /*
-            case 'l':
-                args->socks_addr = optarg;
-                args->is_default_socks_addr = false;
-                break;
-            case 'L':
-                args->mng_addr = optarg;
-                args->is_default_mng_addr = false;
-                break;
-            case 'N':
-                args->disectors_enabled = false;
-                break;
-            case 'p':
-                args->socks_port = port(optarg, argv[0]);
-                break;
-            case 'P':
-                args->mng_port   = port(optarg, argv[0]);
-                break;
-            case 'u':
-                if(nusers >= MAX_USERS) {
-                    fprintf(stderr, "%s: sent too many users, maximum allowed is %d\n", argv[0], MAX_USERS);
-                    exit(1);
-                } else {
-                    user(optarg, args->users + nusers, argv[0]);
-                    nusers++;
-                }
-                break;
-            case 'v':
-                version();
-                exit(0);
-                break;
-            */
             case ':':
                 fprintf(stderr, "%s: missing value for option -%c.\n", argv[0], optopt);
                 usage(argv[0]);
@@ -230,13 +205,27 @@ parse_args(const int argc, char **argv, struct client_request_args *args) {
                 break;
         }
     }
-    if (optind < argc) {
-        fprintf(stderr, "argument not accepted: ");
-        while (optind < argc) {
-            printf("%d", optind);
-            fprintf(stderr, "%s ", argv[optind++]);
+
+    for ( ; optind < argc ; optind++){
+        printf("extra arguments: %s\n", argv[optind]);
+        
+        if(argc - optind == 1) {                        // port (field in ipv4 and ipv6 structs is on same memory place)
+            if(*ip_version == ipv4)
+                sin4->sin_port = htons(port(argv[optind], argv[0]));
+            else
+                sin6->sin6_port = htons(port(argv[optind], argv[0]));
         }
-        fprintf(stderr, "\n");
-        exit(1);
+        else if(argc - optind == 2) {                 // destination ip
+            if(inet_pton(AF_INET, argv[optind], &sin4->sin_addr) > 0){
+                sin4->sin_family = AF_INET;
+                *ip_version = ipv4;
+            } else if(inet_pton(AF_INET6, argv[optind], &sin6->sin6_addr.s6_addr) > 0) {
+                sin6->sin6_family = AF_INET6;
+                *ip_version = ipv6;
+            } else {
+                printf("error parsing ip\n");
+                exit(1);
+            }
+        }
     }
 }
