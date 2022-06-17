@@ -1323,17 +1323,17 @@ socksv5_done(struct selector_key* key) {
 static void log_current_local_date(char *buf) {
     time_t rawtime;
     struct tm *ptm;
-
+    // time retorna la cant de segundos since Epoch, localtime devuelve un struct tm en localtime
     if ((rawtime = time(NULL)) != -1 && (ptm = localtime(&rawtime)) != NULL) {
-        if (strftime(buf, 50, "%FT%T", ptm) > 0)
+        if (strftime(buf, 50, "%FT%T", ptm) > 0) {
             printf("%s", buf);
+            printf("%s", ptm->__tm_zone); //indica el offset local con respecto a UTC
+        }
         else
             printf("<date error>");
     } else {
         printf("<date error>");
     }
-    // a pesar de que tira error en el editor, anda e indica el offset local con respecto a UTC
-    printf("%s", ptm->__tm_zone);
 }
 
 // IP/FQDN y puerto origin server (destino)

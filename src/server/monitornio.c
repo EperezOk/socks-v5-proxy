@@ -326,7 +326,7 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
 finally:
 
     if (error_response != 0)
-       d->status = monitor_error_invalid_data;
+       d->status = monitor_status_invalid_data;
 
     if (-1 == monitor_marshall(d->wb, d->status, dlen, data))
         abort(); // el buffer tiene que ser mas grande en la variable
