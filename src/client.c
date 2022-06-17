@@ -21,13 +21,6 @@ main(const int argc, char **argv) {
 
     parse_args(argc, argv, &args, &sin4, &sin6, &ip_version);
 
-    printf("- token: %s\n", args.token);
-    printf("- method: %d\n", args.method);
-    printf("- target: %d\n", args.target.config_target);
-    printf("- dlen: %d\n", args.dlen);
-    printf("- port: %hu\n", sin6.sin6_port);
-    printf("- ipv6: %s\n", sin6.sin6_family == AF_INET6 ? "yes" : "no");
-
     // socket -> connect -> send -> recv -> close
 
     int sock_fd;

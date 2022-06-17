@@ -105,7 +105,7 @@ version(void) {
 static void
 usage(const char *progname) {
     fprintf(stderr,
-        "Usage: %s [OPTIONS] [DESTINATION] [PORT] [TOKEN]...\n"
+        "Usage: %s [OPTIONS] [DESTINATION] [PORT]\n"
         "Options:\n"
         "-h                 imprime los comandos del programa.\n"
         "-c                 imprime la cantidad de conexiones concurrentes del server.\n"
@@ -139,6 +139,11 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
     memset(sin6, 0, sizeof(*sin6));
 
     int c;
+
+    sin4->sin_family = AF_INET;
+    sin4->sin_port = htons(port(DEFAULT_CONF_PORT, argv[0]));
+    inet_pton(AF_INET, DEFAULT_CONF_ADDR, &sin4->sin_addr);
+    *ip_version = ipv4;
 
     while (1) {
         /*
@@ -255,7 +260,7 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
             else
                 sin6->sin6_port = htons(port(argv[optind], argv[0]));
         }
-        else if(argc - optind == 2) {                 // destination ip
+        else if(argc - optind == 2) {                   // destination ip
             if(inet_pton(AF_INET, argv[optind], &sin4->sin_addr) > 0){
                 sin4->sin_family = AF_INET;
                 *ip_version = ipv4;

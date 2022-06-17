@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #define DEFAULT_CONF_ADDR           "127.0.0.1"
-#define DEFAULT_CONF_PORT           8080
+#define DEFAULT_CONF_PORT           "8080"
 
 #define DEFAULT_DISECTORS_ENABLED   true
 
