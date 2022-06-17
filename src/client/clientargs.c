@@ -23,36 +23,67 @@ port(const char *s, char* progname) {
 }
 
 static size_t
-username(const char *src_username, char *dest_username, char* progname){
-    size_t username_len;
-    if((username_len = strlen(src_username)) > USERNAME_SIZE){
-        fprintf(stderr, "%s: invalid username length (%zu), should be of at most %d characters.\n", progname, username_len, USERNAME_SIZE);
+token_check(const char *src, char *dest_token, char *progname){
+    size_t token_len;
+    if((token_len = strlen(src)) != TOKEN_SIZE){
+        fprintf(stderr, "%s: invalid toklen length (%zu), should be of exactly %d characters.\n", progname, token_len, TOKEN_SIZE);
         exit(1);
     }
-    memcpy(dest_username, src_username, username_len);
-    return username_len;
+    memcpy(dest_token, src, TOKEN_SIZE);
+    return TOKEN_SIZE;
 }
 
-/*
-static void
-user(char *s, struct users *user, char* progname) {
-    char *p = strchr(s, ':');
+static size_t
+string_check(const char *src, char *dest, char* field_name, size_t max_len, char* progname){
+    size_t str_len;
+    if((str_len = strlen(src)) > max_len){
+        fprintf(stderr, "%s: invalid username length (%zu), should be of at most %zu characters.\n", progname, str_len, max_len);
+        exit(1);
+    }
+    memcpy(dest, src, str_len);
+    return str_len;
+}
 
-    if(p == NULL) {
-        fprintf(stderr, "%s: missing password for user %s.\n", progname, s);
+static size_t
+username_with_password(char *src, struct config_add_proxy_user *user_params, char *progname){
+    size_t str_len;
+    char *password = strchr(src, ':');
+
+    if(password == NULL) {
+        fprintf(stderr, "%s: missing password for user %s.\n", progname, src);
         exit(1);
-    } else if (s[0] == ':') {
-        fprintf(stderr, "%s: missing username for password %s.\n", progname, p);
+    } else if(src[0] == ':') {
+        fprintf(stderr, "%s: missing username for password %s.\n", progname, password);
         exit(1);
-    } else {
-        *p = 0;
-        p++;
-        user->name = s;
-        user->pass = p;
     }
 
+    char* username = strtok(src, ":");
+    str_len = string_check(username, user_params->user, "username", USERNAME_SIZE, progname);
+    user_params->separator = 0;
+    str_len++;
+    str_len += string_check(password, user_params->pass, "password", PASSWORD_SIZE, progname);
+    return str_len;
 }
-*/
+
+static size_t
+username_with_token(char *src, struct config_add_admin_user *admin_params, char *progname){
+    size_t str_len;
+    char *token = strchr(src, ':');
+
+    if(token == NULL){
+        fprintf(stderr, "%s: missing token for user %s.\n", progname, src);
+        exit(1);
+    } else if(src[0] == ':'){
+        fprintf(stderr, "%s: missing username for token %s.\n", progname, token);
+    }
+
+    char* username = strtok(src, ":");
+    str_len = string_check(username, admin_params->user, "username", USERNAME_SIZE, progname);
+    admin_params->separator = 0;
+    str_len++;
+    str_len += token_check(token, admin_params->token, progname);
+    return str_len;
+}
 
 static void
 version(void) {
@@ -167,25 +198,25 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
                 // Adds proxy user
                 args->method = config;
                 args->target.config_target = add_proxy_user;
+                args->dlen = username_with_password(optarg, &args->data.add_proxy_user_params, argv[0]);
                 break;
             case 'U':
                 // Adds admin user
                 args->method = config;
                 args->target.config_target = add_admin_user;
+                args->dlen = username_with_token(optarg, &args->data.add_admin_user_params, argv[0]);
                 break;
             case 'd':
                 // Deletes proxy user
                 args->method = config;
                 args->target.config_target = del_proxy_user;
-                // TODO: Add checking of username length and throw error if exceeds USERNAME_SIZE
-                args->dlen = username(optarg, args->data.user, argv[0]);
+                args->dlen = string_check(optarg, args->data.user, "username", USERNAME_SIZE, argv[0]);
                 break;
             case 'D':
                 // Deletes admin user
                 args->method = config;
                 args->target.config_target = del_admin_user;
-                // TODO: Add checking of username length and throw error if exceeds USERNAME_SIZE
-                args->dlen = username(optarg, args->data.user, argv[0]);
+                args->dlen = string_check(optarg, args->data.user, "username", USERNAME_SIZE, argv[0]);
                 break;
             case 'v':
                 // Prints program version
@@ -207,8 +238,6 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
     }
 
     for ( ; optind < argc ; optind++){
-        printf("extra arguments: %s\n", argv[optind]);
-        
         if(argc - optind == 1) {                        // port (field in ipv4 and ipv6 structs is on same memory place)
             if(*ip_version == ipv4)
                 sin4->sin_port = htons(port(argv[optind], argv[0]));
@@ -228,4 +257,13 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
             }
         }
     }
+
+    // Token parsing
+    char* token = getenv(TOKEN_ENV_VAR_NAME);
+    if(token == NULL){
+        fprintf(stderr, "%s: token not present, set it with 'export %s=<token>'.\n", argv[0], TOKEN_ENV_VAR_NAME);
+        exit(1);
+    }
+    token_check(getenv("MONITOR_TOKEN"), args->token, argv[0]);
+
 }

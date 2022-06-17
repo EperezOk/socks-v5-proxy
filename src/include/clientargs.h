@@ -16,25 +16,27 @@
 #define USERNAME_SIZE               0xFF
 #define PASSWORD_SIZE               0xFF
 
+#define TOKEN_ENV_VAR_NAME          "MONITOR_TOKEN"
+
 enum method {
-    get     = 0x00,
-    config  = 0x01
+    get     = 0,
+    config  = 1
 };
 
 enum get_target {
-    historic_connections    = 0x00,
-    concurrent_connections  = 0x01,
-    transferred_bytes       = 0x02,
-    proxy_users_list        = 0x03,
-    admin_users_list        = 0x04
+    historic_connections    = 0,
+    concurrent_connections  = 1,
+    transferred_bytes       = 2,
+    proxy_users_list        = 3,
+    admin_users_list        = 4
 };
 
 enum config_target {
-    toggle_disector     = 0x00,
-    add_proxy_user      = 0x01,
-    del_proxy_user      = 0x02,
-    add_admin_user      = 0x03,
-    del_admin_user      = 0x04
+    toggle_disector     = 0,
+    add_proxy_user      = 1,
+    del_proxy_user      = 2,
+    add_admin_user      = 3,
+    del_admin_user      = 4
 };
 
 union target {
@@ -43,8 +45,8 @@ union target {
 };
 
 enum config_disector_data {
-    disector_off    = 0x00,
-    disector_on     = 0x01,
+    disector_off    = 0,
+    disector_on     = 1,
 };
 
 struct config_add_proxy_user {
@@ -75,9 +77,17 @@ struct client_request_args {
     union data      data;
 };
 
+struct client_serialized_request {
+    char            token[TOKEN_SIZE];
+    uint8_t         method;
+    uint8_t         target;
+    uint16_t        dlen;
+    uint8_t         data[8192];    
+};
+
 enum ip_version {
-    ipv4 = 0x04,
-    ipv6 = 0x06
+    ipv4 = 4,
+    ipv6 = 6
 };
 
 /**

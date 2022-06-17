@@ -15,8 +15,6 @@ main(const int argc, char **argv) {
 
     parse_args(argc, argv, &args, &sin4, &sin6, &ip_version);
 
-    snprintf(args.token, TOKEN_SIZE, "%s", "mybeautifultoke");
-
     printf("- token: %s\n", args.token);
     printf("- method: %d\n", args.method);
     printf("- target: %d\n", args.target.config_target);
@@ -50,10 +48,39 @@ main(const int argc, char **argv) {
         }
     }
 
+    struct client_serialized_request request;
+
+    memcpy(request.token, args.token, TOKEN_SIZE);
+    request.method = args.method;
+    // TODO: Check if theres a better way to do this passing
+    int target_value;
+    memcpy(&target_value, &args.target, sizeof(int));
+    request.target = target_value;
+
+    // request.dlen = htons(args.dlen);
+    request.dlen = args.dlen;
+    memcpy(request.data, &args.data, request.dlen);
+
+    if(send(sock_fd, &request, sizeof(request) - DATA_SIZE + request.dlen, 0) < 0){
+        perror("client socket send");
+        return 1;
+    }
+
+    /*
     if(send(sock_fd, &args, sizeof(args) - sizeof(args.data) + args.dlen, 0) < 0){
         perror("client socket send");
         return 1;
     }
+    */
+
+    // char buf[2000];
+
+    // if(recv(sock_fd, buf, ) < 0){
+    //     perror("client socket recv");
+    //     return 1;
+    // }
+
+    // parsing -> mostrar respuesta
 
     if(close(sock_fd) < 0){
         perror("client socket close");
