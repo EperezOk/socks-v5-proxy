@@ -590,13 +590,14 @@ int socksv5_unregister_user(char *uname) {
     return -1;  // usuario no encontrado
 }
 
+// entrega la lista de usuarios con formato <usuario>\0<usuario>
 uint16_t socksv5_get_users(char unames[MAX_USERS * 0xff]) {
     uint16_t dlen = 0;
     for (size_t i = 0; i < registered_users; i++) {
         strcpy(unames + dlen, users[i].uname);
         dlen += strlen(users[i].uname) + 1; // incluimos el \0
     }
-    return dlen;
+    return dlen - 1; // no pone el ultimo \0
 }
 
 /** inicializa las variables de los estados AUTH_ */

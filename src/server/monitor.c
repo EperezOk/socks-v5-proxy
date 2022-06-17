@@ -346,10 +346,14 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     buffer_write(b, array[1]);
     buffer_write(b, array[0]);
 
-
     uint8_t *databytes = (uint8_t *) data;
-    for (uint16_t i = 0; i < dlen; i++) {
-        buffer_write(b, databytes[i]);
+
+    if (databytes == NULL) {
+        buffer_write(b, 0);
+    } else {
+        for (uint16_t i = 0; i < dlen; i++) {
+            buffer_write(b, databytes[i]);
+        }
     }
 
     return dlen + 3;

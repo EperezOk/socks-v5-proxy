@@ -105,10 +105,10 @@ static const struct fd_handler monitor_handler = {
 };
 
 static void
-monitor_init(struct selector_key *key) {
-    struct monitor_st *d    = &ATTACHMENT(key)->request;
-    d->rb                   = &(ATTACHMENT(key)->read_buffer);
-    d->wb                   = &(ATTACHMENT(key)->write_buffer);
+monitor_init(struct connection *state) {
+    struct monitor_st *d    = &state->request;
+    d->rb                   = &(state->read_buffer);
+    d->wb                   = &(state->write_buffer);
     d->parser.monitor       = &d->monitor;
     d->status               = monitor_status_server_error;
     monitor_parser_init(&d->parser);
@@ -132,7 +132,7 @@ monitor_passive_accept(struct selector_key *key) {
     if(SELECTOR_SUCCESS != selector_register(key->s, client, &monitor_handler, OP_READ, state))
         goto fail;
 
-    monitor_init(key);
+    monitor_init(state);
 
     return;
 
@@ -171,7 +171,7 @@ int monitor_register_admin(char *uname, char *token) { // ambos null terminated
 
     // insertamos al final (podrian insertarse en orden alfabetico para mas eficiencia pero al ser pocos es irrelevante)
     strncpy(admins[registered_admins].uname, registered_admins == 0 ? default_admin_uname : uname, 0xff);
-    strncpy(admins[registered_admins++].token, token, 0x10);
+    strncpy(admins[registered_admins++].token, token, 0x11);
     return 0;
 }
 
@@ -191,13 +191,14 @@ int monitor_unregister_admin(char *uname) {
     return -1;  // usuario no encontrado
 }
 
+// entrega la lista de admins con formato <usuario>\0<usuario>
 static uint16_t monitor_get_admins(char unames[MAX_ADMINS * 0xff]) {
     uint16_t dlen = 0;
     for (size_t i = 0; i < registered_admins; i++) {
         strcpy(unames + dlen, admins[i].uname);
         dlen += strlen(admins[i].uname) + 1; // incluimos el \0
     }
-    return dlen;
+    return dlen - 1; // no pone el ultimo \0
 }
 
 static bool
