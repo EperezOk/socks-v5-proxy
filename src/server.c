@@ -71,7 +71,7 @@ main(const int argc, char **argv) {
             err_msg = "unable to create IPv4 socks socket";
             goto finally;
         }
-        fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
+        fprintf(stdout, "Socks: listening on IPv4 TCP port %d\n", args.socks_port);
     }
 
     // socket pasivo monitoreo IPv4
@@ -81,7 +81,7 @@ main(const int argc, char **argv) {
             err_msg = "unable to create IPv4 monitor socket";
             goto finally;
         }
-        fprintf(stdout, "Listening IPv4 monitor on TCP port %d\n", args.mng_port);
+        fprintf(stdout, "Monitor: listening on IPv4 TCP port %d\n", args.mng_port);
     }
 
      // socket pasivo socks IPv6
@@ -93,7 +93,7 @@ main(const int argc, char **argv) {
             err_msg = "unable to create IPv6 socket";
             goto finally;
         }
-        fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
+        fprintf(stdout, "Socks: listening on IPv6 TCP port %d\n", args.socks_port);
     }
 
      // socket pasivo monitoreo IPv6
@@ -105,7 +105,7 @@ main(const int argc, char **argv) {
             err_msg = "unable to create IPv6 socket";
             goto finally;
         }
-        fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.mng_port);
+        fprintf(stdout, "Monitor: listening on IPv6 TCP port %d\n", args.mng_port);
     }
     
     if(!IS_FD_USED(server_v4) && !IS_FD_USED(server_v6)) {
@@ -255,6 +255,7 @@ finally:
     selector_close();
 
     socksv5_pool_destroy();
+    connection_pool_destroy();
 
     if (server_v4 >= 0)
         close(server_v4);

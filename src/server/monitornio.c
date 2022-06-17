@@ -4,9 +4,19 @@
 #include <errno.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include "../include/buffer.h";
-#include "../include/monitornio.h";
-#include "../include/socks5nio.h";
+#include "../include/buffer.h"
+#include "../include/monitor.h"
+#include "../include/monitornio.h"
+#include "../include/socks5nio.h"
+
+#define N(x) (sizeof(x)/sizeof((x)[0]))
+
+struct monitor_st {
+    buffer                       *rb, *wb;
+    struct monitor               monitor;
+    struct monitor_parser        parser;
+    enum monitor_response_status status;
+};
 
 struct connection {
     /** informacion del cliente */
@@ -21,11 +31,6 @@ struct connection {
 
     /** siguiente en la pool */
     struct connection *next;
-};
-
-struct monitor_st {
-    buffer       *rb, *wb;
-    // TODO: agregar parser y state
 };
 
 /** Pool de structs connection para ser reusados */
@@ -74,7 +79,6 @@ connection_destroy(struct connection *s) {
     }
 }
 
-// TODO: llamar al finalizar server.c
 void
 connection_pool_destroy(void) {
     struct connection *next, *s;
@@ -100,6 +104,16 @@ static const struct fd_handler monitor_handler = {
     .handle_close  = monitor_close, // se llama en el selector_unregister_fd
 };
 
+static void
+monitor_init(struct selector_key *key) {
+    struct monitor_st *d    = &ATTACHMENT(key)->request;
+    d->rb                   = &(ATTACHMENT(key)->read_buffer);
+    d->wb                   = &(ATTACHMENT(key)->write_buffer);
+    d->parser.monitor       = &d->monitor;
+    d->status               = monitor_status_server_error;
+    monitor_parser_init(&d->parser);
+}
+
 /** Intenta aceptar la nueva conexión entrante*/
 void
 monitor_passive_accept(struct selector_key *key) {
@@ -118,6 +132,8 @@ monitor_passive_accept(struct selector_key *key) {
     if(SELECTOR_SUCCESS != selector_register(key->s, client, &monitor_handler, OP_READ, state))
         goto fail;
 
+    monitor_init(key);
+
     return;
 
 fail:
@@ -133,7 +149,7 @@ fail:
 
 struct admin {
     char    uname[0xff];    // null terminated
-    char    token[0x10];    // 16 bytes fijos, no-null-terminated
+    char    token[0x11];    // 16 bytes fijos + \0
 };
 
 /** el admins[0] sera creado apenas se corra el servidor, pasando el token con el parametro adecuado */
@@ -141,12 +157,11 @@ struct admin admins[MAX_ADMINS]; // TODO: agregar admin root desde el server.c
 size_t registered_admins = 0;
 char *default_admin_uname = "root";
 
-// TODO: funcion a llamarse en el monitor_process()
-int monitor_register_admin(char *uname, char *token) {
+int monitor_register_admin(char *uname, char *token) { // ambos null terminated
     if (registered_admins >= MAX_ADMINS)
         return 1; // maximo numero de usuarios alcanzado
     
-    if (strnlen(token, 0x10) < 0x10)
+    if (strlen(token) != 0x10)
         return -1; // token invalido
 
     for (size_t i = 0; i < registered_admins; i++) {
@@ -179,7 +194,7 @@ int monitor_unregister_admin(char *uname) {
 static uint16_t monitor_get_admins(char unames[MAX_ADMINS * 0xff]) {
     uint16_t dlen = 0;
     for (size_t i = 0; i < registered_admins; i++) {
-        strcpy(unames[dlen], admins[i].uname);
+        strcpy(unames + dlen, admins[i].uname);
         dlen += strlen(admins[i].uname) + 1; // incluimos el \0
     }
     return dlen;
@@ -194,19 +209,8 @@ monitor_is_admin(char *token) {
     return false;
 }
 
-static void
-monitor_init(struct selector_key *key) {
-    struct monitor_st *d    = &ATTACHMENT(key)->request;
-
-    d->rb                   = &(ATTACHMENT(key)->read_buffer);
-    d->wb                   = &(ATTACHMENT(key)->write_buffer);
-    // TODO: incorporar con el parser
-    // d->parser.request       = &d->request;
-    // d->status               = status_monitor_server_failure;
-    // monitor_parser_init(&d->parser);
-}
-
-static int monitor_process(struct selector_key *key, struct monitor_st *d);
+static void monitor_finish(struct selector_key* key);
+static void monitor_process(struct selector_key *key, struct monitor_st *d);
 
 /** lee todos los bytes de la request e inicia su proceso */
 static void
@@ -214,7 +218,6 @@ monitor_read(struct selector_key *key) {
     struct monitor_st *d = &ATTACHMENT(key)->request;
 
     buffer *b       = d->rb;
-    bool error      = false;
     uint8_t *ptr;
     size_t count;
     ssize_t n;
@@ -223,12 +226,11 @@ monitor_read(struct selector_key *key) {
     n = recv(key->fd, ptr, count, 0);
 
     if (n <= 0) {
-        monitor_done(key);
+        monitor_finish(key);
     } else {
         buffer_write_adv(b, n);
-        // TODO: llamada a funciones del parser
-        int st = monitor_consume(b, &d->parser, &error);
-        if (monitor_is_done(st, 0)) {
+        int st = monitor_consume(b, &d->parser);
+        if (monitor_is_done(st)) {
             monitor_process(key, d);    // ejecuta la accion pedida y escribe la response en el buffer
             selector_set_interest_key(key, OP_WRITE);   // pasamos al monitor_write() cuando podamos escribir
         }
@@ -238,94 +240,92 @@ monitor_read(struct selector_key *key) {
 // solo debe retornar -1 en caso de error terminal en la conexion, si es un error en la request se pasa al paso de escritura (y retorno 0 por ej)
 static void
 monitor_process(struct selector_key *key, struct monitor_st *d) {
-    uint8_t *data;
-    uint16_t dlen;
+    uint8_t *data = NULL;
+    uint16_t dlen = 1;
     int error_response = 0;
 
-    // TODO: pasar el token
-    if (!monitor_is_admin(d->parser.token)) {
-        // setear status invalid auth
-        return;
+    if (!monitor_is_admin(d->parser.monitor->token)) {
+        d->status = monitor_status_error_auth;
+        goto finally;
     }
 
-    // TODO: implementar con los campos del parser
-    switch (d->method) {
-        case GET:
-            switch (d->target) {
-                case current_connections: {
+    switch (d->parser.monitor->method) {
+        case monitor_method_get:
+            switch (d->parser.monitor->target.target_get) {
+                case monitor_target_get_concurrent: {
                     size_t cc = socksv5_current_connections();
-                    data = &cc;
+                    data = (uint8_t *) &cc;
                     dlen = sizeof(cc);
                     break;
                 }
-                case historic_connections: {
+                case monitor_target_get_historic: {
                     size_t hc = socksv5_historic_connections();
-                    data = &hc;
+                    data = (uint8_t *) &hc;
                     dlen = sizeof(hc);
                     break;
                 }
-                case bytes_transferred: {
+                case monitor_target_get_transfered: {
                     size_t bt = socksv5_bytes_transferred();
-                    data = &bt;
+                    data = (uint8_t *) &bt;
                     dlen = sizeof(bt);
                     break;
                 }
-                case list_proxy_users: {
+                case monitor_target_get_proxyusers: {
                     char usernames[MAX_USERS * 0xff];
                     dlen = socksv5_get_users(usernames);
-                    data = usernames;
+                    data = (uint8_t *) usernames;
                     break;
                 }
-                case list_admins: {
+                case monitor_target_get_adminusers: {
                     char usernames[MAX_USERS * 0xff];
                     dlen = monitor_get_admins(usernames);
-                    data = usernames;
+                    data = (uint8_t *) usernames;
                     break;
                 }
                 default: {
-                    // TODO: setear en parser status invalid target
+                    d->status = monitor_status_invalid_target;
                     break;
                 }
             }
             break;
-        case CONFIG:
-            data = NULL;
-            dlen = 1;
-
-            switch (d->target) {
-                case disector_toggle: {
-                    socksv5_toggle_disector(/*value del parser*/);
+        case monitor_method_config:
+            switch (d->parser.monitor->target.target_config) {
+                case monitor_target_config_pop3disector: {
+                    bool to = d->parser.monitor->data.disector_data_params == disector_on ? true : false;
+                    socksv5_toggle_disector(to);
                     break;
                 }
-                case add_proxy_user: {
-                    error_response = socksv5_register_user(/*values del parser*/);
+                case monitor_target_config_add_proxyuser: {
+                    error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
                     break;
                 }
-                case remove_proxy_user: {
-                    error_response = socksv5_unregister_user(/*value del parser*/);
+                case monitor_target_config_delete_proxyuser: {
+                    error_response = socksv5_unregister_user(d->parser.monitor->data.user);
                     break;
                 }
-                case add_admin: {
-                    error_response = monitor_register_admin(/*values del parser*/);
+                case monitor_target_config_add_admin: {
+                    error_response = monitor_register_admin(d->parser.monitor->data.add_admin_user_param.user, d->parser.monitor->data.add_admin_user_param.token);
                     break;
                 }
-                case remove_admin: {
-                    error_response = monitor_unregister_admin(/*values del parser*/);
+                case monitor_target_config_delete_admin: {
+                    error_response = monitor_unregister_admin(d->parser.monitor->data.user);
                     break;
                 }
                 default: {
-                    // TODO: setear en parser status invalid target
+                    d->status = monitor_status_invalid_target;
                     break;
                 }
             }
             break;
         default:
-            // TODO: setear en el estado del parser invalid method
+            d->status = monitor_status_invalid_method;
             break;
     }
 
+finally:
+
     if (error_response != 0)
-        // TODO: setear status invalid data
+       d->status = monitor_error_invalid_data;
 
     if (-1 == monitor_marshall(d->wb, d->status, dlen, data))
         abort(); // el buffer tiene que ser mas grande en la variable
@@ -345,17 +345,17 @@ monitor_write(struct selector_key *key) {
     n = send(key->fd, ptr, count, MSG_NOSIGNAL);
 
     if (n == -1) {
-        monitor_done(key);
+        monitor_finish(key);
     } else {
         buffer_read_adv(b, n);
         if (!buffer_can_read(b))
-            monitor_done(key); // terminamos de escribir, cerramos la conexion
+            monitor_finish(key); // terminamos de escribir, cerramos la conexion
     }
 }
 
 /** finaliza la conexion, tanto si termino con exito (status positivo o negativo) como si no (error de comunicacion) */
 static void
-monitor_done(struct selector_key* key) {
+monitor_finish(struct selector_key* key) {
     int client_fd = ATTACHMENT(key)->client_fd;
     if (client_fd != -1) {
         if(SELECTOR_SUCCESS != selector_unregister_fd(key->s, client_fd)) // desencadena el monitor_close()

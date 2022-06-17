@@ -145,7 +145,7 @@ union data {
 
 
 struct monitor {
-    uint8_t                 token[TOKEN_SIZE];
+    char                    token[TOKEN_SIZE];
     enum  monitor_method    method;
     union monitor_target    target;
     uint16_t                dlen;
@@ -169,12 +169,9 @@ monitor_parser_init(struct monitor_parser *p);
 /**
  * por cada elemento del buffer llama a "monitor_parser_feed" hasta que
  * el parseo se encuentra completo o se requieren mas bytes.
- * 
- * param errored parametro de salida. si es diferente de NULL se deja dicho valor
- * si el parsing se debio a una condicion de error
  */
 enum monitor_state
-monitor_consume(buffer *b, struct monitor_parser *p, bool *errored);
+monitor_consume(buffer *b, struct monitor_parser *p);
 
 
 
@@ -185,10 +182,7 @@ monitor_consume(buffer *b, struct monitor_parser *p, bool *errored);
  * En caso de haber terminado permite tambien saber si se debe a un error.
  */
 bool
-monitor_is_done(const enum monitor_state st, bool *errored);
-
-void
-monitor_close(struct monitor_parser *p);
+monitor_is_done(const enum monitor_state st);
 
 /*
  * serializa en buff una respuesta al request del protocolo de monitoreo,

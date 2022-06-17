@@ -593,7 +593,7 @@ int socksv5_unregister_user(char *uname) {
 uint16_t socksv5_get_users(char unames[MAX_USERS * 0xff]) {
     uint16_t dlen = 0;
     for (size_t i = 0; i < registered_users; i++) {
-        strcpy(unames[dlen], users[i].uname);
+        strcpy(unames + dlen, users[i].uname);
         dlen += strlen(users[i].uname) + 1; // incluimos el \0
     }
     return dlen;

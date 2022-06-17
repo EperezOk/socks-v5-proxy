@@ -129,25 +129,25 @@ dlen(const uint8_t c, struct monitor_parser *p) {
         next = monitor_dlen;
     } 
     else {
-        p->len = ntohs(*(uint16_t*)combinedlen); // Para evitar problemas de endianness armo el uint16 de dlen segun el endianness del sistema. (Suponiendo que me los manda en network order "bigendean")
+        p->monitor->dlen = ntohs(*(uint16_t*)combinedlen); // Para evitar problemas de endianness armo el uint16 de dlen segun el endianness del sistema. (Suponiendo que me los manda en network order "bigendean")
         switch (p->monitor->target.target_config) {
             case monitor_target_config_pop3disector:
                 next = monitor_data;
                 break;
             case monitor_target_config_add_proxyuser:
-                remaining_set(p, p->len);
+                remaining_set(p, p->monitor->dlen);
                 next = monitor_data;
                 break;
             case monitor_target_config_delete_proxyuser:
-                remaining_set(p, p->len); 
+                remaining_set(p, p->monitor->dlen); 
                 next = monitor_data;
                 break;
             case monitor_target_config_add_admin:
-                remaining_set(p, p->len);
+                remaining_set(p, p->monitor->dlen);
                 next = monitor_data;
                 break;
             case monitor_target_config_delete_admin:
-                remaining_set(p, p->len);
+                remaining_set(p, p->monitor->dlen);
                 next = monitor_data;
                 break;
             default:
@@ -311,30 +311,22 @@ monitor_parser_feed(struct monitor_parser *p, const uint8_t c) {
 }
 
 extern bool
-monitor_is_done(const enum monitor_state st, bool *errored) {
-    if (st >= monitor_error && errored != 0)
-        *errored = true;
+monitor_is_done(const enum monitor_state st) {
     return st >= monitor_done;
 }
 
 extern enum monitor_state
-monitor_consume(buffer *b, struct monitor_parser *p, bool *errored) {
+monitor_consume(buffer *b, struct monitor_parser *p) {
     enum monitor_state st = p->state;
 
     while (buffer_can_read(b)) {
         const uint8_t c = buffer_read(b);
         st = monitor_parser_feed(p, c); // cargamos 1 solo byte
-        if (monitor_is_done(st, errored))
+        if (monitor_is_done(st))
             break;
     }
     return st;
 }
-
-extern void
-monitor_close(struct monitor_parser *p) {
-    // nada que hacer
-}
-
 
 extern int
 monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t dlen, void *data) {
