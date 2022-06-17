@@ -47,37 +47,48 @@ string_check(const char *src, char *dest, char* field_name, size_t max_len, char
 static size_t
 username_with_password(char *src, struct config_add_proxy_user *user_params, char *progname){
     size_t str_len;
-    char *password = strchr(src, ':');
+    char *separator = strchr(src, ':');
 
-    if(password == NULL) {
+    if(separator == NULL) {
         fprintf(stderr, "%s: missing password for user %s.\n", progname, src);
         exit(1);
     } else if(src[0] == ':') {
-        fprintf(stderr, "%s: missing username for password %s.\n", progname, password);
+        fprintf(stderr, "%s: missing username for password %s.\n", progname, separator + 1);
         exit(1);
     }
 
-    char* username = strtok(src, ":");
+    char *username = strtok(src, ":");
+    char *password = separator + 1;
+
     str_len = string_check(username, user_params->user, "username", USERNAME_SIZE, progname);
     user_params->separator = 0;
     str_len++;
     str_len += string_check(password, user_params->pass, "password", PASSWORD_SIZE, progname);
+    
+    printf("- username: %s\n", user_params->user);
+    printf("- password: %s\n", user_params->pass);
+    
     return str_len;
 }
 
 static size_t
 username_with_token(char *src, struct config_add_admin_user *admin_params, char *progname){
     size_t str_len;
-    char *token = strchr(src, ':');
+    char *separator = strchr(src, ':');
 
-    if(token == NULL){
+    if(separator == NULL){
         fprintf(stderr, "%s: missing token for user %s.\n", progname, src);
         exit(1);
     } else if(src[0] == ':'){
-        fprintf(stderr, "%s: missing username for token %s.\n", progname, token);
+        fprintf(stderr, "%s: missing username for token %s.\n", progname, separator + 1);
     }
 
     char* username = strtok(src, ":");
+    char* token = separator + 1;
+
+    printf("- username: %s\n", username);
+    printf("- token: %s\n", token);
+
     str_len = string_check(username, admin_params->user, "username", USERNAME_SIZE, progname);
     admin_params->separator = 0;
     str_len++;

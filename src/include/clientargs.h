@@ -78,6 +78,7 @@ struct client_request_args {
 };
 
 struct client_serialized_request {
+    uint8_t         version;
     char            token[TOKEN_SIZE];
     uint8_t         method;
     uint8_t         target;
