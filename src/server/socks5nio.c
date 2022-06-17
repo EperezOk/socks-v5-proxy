@@ -647,19 +647,23 @@ auth_read(struct selector_key *key) {
 
 static unsigned
 auth_process(struct selector_key *key, struct auth_st *d) {
-    unsigned ret            = AUTH_WRITE;
+    bool authenticated = false;
     
     for (size_t i = 0; i < registered_users; i++) {
         if (strncmp(d->auth.uname, users[i].uname, 0xff) == 0 &&
             strncmp(d->auth.passwd, users[i].passwd, 0xff) == 0) {
             // sets client uname in struct socks5
             ATTACHMENT(key)->client_uname = users[i].uname;
-            d->status = auth_status_succeeded;
-            return ret;
+            authenticated = true;
+            break;
         }
     }
-    d->status = auth_status_failure;
-    return ret;
+    d->status = authenticated ? auth_status_succeeded : auth_status_failure;
+
+    if (-1 == auth_marshall(d->wb, d->status))
+        abort();
+
+    return AUTH_WRITE;
 }
 
 static unsigned
@@ -671,11 +675,6 @@ auth_write(struct selector_key *key) {
     uint8_t *ptr;
     size_t count;
     ssize_t n;
-
-    if (-1 == auth_marshall(b, d->status)) {
-        d->status = status_general_SOCKS_server_failure;
-        abort();
-    }
 
     ptr = buffer_read_ptr(b, &count);
     n = send(key->fd, ptr, count, MSG_NOSIGNAL);
@@ -757,6 +756,17 @@ static void *
 request_resolv_blocking(void *data);
 
 static unsigned
+request_error_write(struct selector_key *key, struct request_st *d, enum socks_response_status status) {
+    d->status = status;
+    if (-1 == request_marshall(d->wb, d->status)) {
+        d->status = status_general_SOCKS_server_failure;
+        abort(); // el buffer tiene que ser mas grande en la variable
+    }
+    selector_status st = selector_set_interest(key->s, ATTACHMENT(key)->client_fd, OP_WRITE);
+    return SELECTOR_SUCCESS == st ? REQUEST_WRITE : ERROR;
+}
+
+static unsigned
 request_process(struct selector_key *key, struct request_st *d) {
     unsigned ret;
     pthread_t tid;
@@ -783,17 +793,13 @@ request_process(struct selector_key *key, struct request_st *d) {
                 case socks_req_addrtype_domain: {
                     struct selector_key *k = malloc(sizeof(*key));
                     if (k == NULL) {
-                        ret = REQUEST_WRITE;
-                        d->status = status_general_SOCKS_server_failure;
-                        selector_set_interest_key(key, OP_WRITE);
+                        ret = request_error_write(key, d, status_general_SOCKS_server_failure);
                     } else {
                         memcpy(k, key, sizeof(*key));
                         // CREACION DE HILO PARA RESOLUCION DNS
                         if (-1 == pthread_create(&tid, 0, request_resolv_blocking, k)) {
-                            ret = REQUEST_WRITE;
-                            d->status = status_general_SOCKS_server_failure;
+                            ret = request_error_write(key, d, status_general_SOCKS_server_failure);
                             free(k);
-                            selector_set_interest_key(key, OP_WRITE);
                         } else {
                             ret = REQUEST_RESOLV;
                             selector_set_interest_key(key, OP_NOOP);
@@ -802,17 +808,14 @@ request_process(struct selector_key *key, struct request_st *d) {
                     break;
                 }
                 default: {
-                    ret = REQUEST_WRITE;
-                    d->status = status_address_type_not_supported;
-                    selector_set_interest_key(key, OP_WRITE);
+                    ret = request_error_write(key, d, status_address_type_not_supported);
                 }
             }
             break;
         case socks_req_cmd_bind:
         case socks_req_cmd_associate:
         default:
-            d->status = status_command_not_supported;
-            ret = REQUEST_WRITE;
+            ret = request_error_write(key, d, status_command_not_supported);
             break;
     }
 
@@ -857,17 +860,13 @@ request_resolv_done(struct selector_key *key) {
     struct request_st *d = &ATTACHMENT(key)->client.request;
     struct socks5 *s     = ATTACHMENT(key);
 
-    if (s->origin_resolution == 0) {
-        d->status = status_host_unreachable;
-        selector_status st = selector_set_interest_key(key, OP_WRITE);
-        return SELECTOR_SUCCESS == st ? REQUEST_WRITE : ERROR;
-    } else {
-        s->origin_resolution_current = s->origin_resolution;
-        s->origin_domain = s->origin_resolution->ai_family;
-        s->origin_addr_len = s->origin_resolution->ai_addrlen;
-        memcpy(&s->origin_addr, s->origin_resolution->ai_addr, s->origin_resolution->ai_addrlen);
-    }
+    if (s->origin_resolution == 0)
+        return request_error_write(key, d, status_host_unreachable);
 
+    s->origin_resolution_current = s->origin_resolution;
+    s->origin_domain = s->origin_resolution->ai_family;
+    s->origin_addr_len = s->origin_resolution->ai_addrlen;
+    memcpy(&s->origin_addr, s->origin_resolution->ai_addr, s->origin_resolution->ai_addrlen);
     return request_connect(key, d);
 }
 
@@ -877,6 +876,7 @@ static unsigned
 request_connect(struct selector_key *key, struct request_st *d) {
     bool error                        = false;
     int *fd                           = d->origin_fd;
+    enum socks_response_status status = d->status;
 
     // si ya habiamos asignado una vez el fd y estamos tratando de conectarnos con una IP diferente, cerramos el viejo y lo creamos devuelta
     if (ATTACHMENT(key)->stm.current->state == REQUEST_CONNECTING) {
@@ -887,7 +887,7 @@ request_connect(struct selector_key *key, struct request_st *d) {
     *fd = socket(ATTACHMENT(key)->origin_domain, SOCK_STREAM, 0);
 
     if (*fd == -1) {
-        d->status = status_general_SOCKS_server_failure;
+        status = status_general_SOCKS_server_failure;
         error = true;
         goto finally;
     }
@@ -914,7 +914,7 @@ request_connect(struct selector_key *key, struct request_st *d) {
             }
             ATTACHMENT(key)->references += 1;
         } else {
-            d->status = errno_to_socks(errno);
+            status = errno_to_socks(errno);
             error = true;
             goto finally;
         }
@@ -929,8 +929,7 @@ finally:
             close(*fd);
             *fd = -1;
         }
-        selector_status st = selector_set_interest(key->s, ATTACHMENT(key)->client_fd, OP_WRITE);
-        return SELECTOR_SUCCESS == st ? REQUEST_WRITE : ERROR;
+        return request_error_write(key, d, status);
     }
 
     return REQUEST_CONNECTING;
@@ -987,6 +986,11 @@ request_connecting(struct selector_key *key) { // key es un origin_fd
         s->origin_resolution_current = 0;
     }
 
+    if (-1 == request_marshall(s->client.request.wb, s->client.request.status)) {
+        s->client.request.status = status_general_SOCKS_server_failure;
+        abort();
+    }
+
     selector_status ss = 0;
     ss |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
     ss |= selector_set_interest_key(key, OP_NOOP);
@@ -1007,11 +1011,6 @@ request_write(struct selector_key *key) {
     uint8_t *ptr;
     size_t count;
     ssize_t n;
-
-    if (-1 == request_marshall(b, d->status)) {
-        d->status = status_general_SOCKS_server_failure;
-        abort(); // el buffer tiene que ser mas grande en la variable
-    }
 
     ptr = buffer_read_ptr(b, &count);
     // si estamos aca es porque el select nos desperto y tiene que haber espacio para mandar al menos 1 byte (no puede bloquear)
