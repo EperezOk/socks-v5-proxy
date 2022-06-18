@@ -79,13 +79,19 @@ main(const int argc, char **argv) {
 
     static uint8_t combinedlen[2] = {0};
     static uint8_t numeric_data_array[4] = {0};
-
-    static u_int16_t dlen;
+    static uint16_t dlen;
     static uint32_t numeric_response;
 
-    while (recv(sock_fd, buf, MAX_BYTES_DATA, 0) > 0) { // no termino de mandar sigue recibiendo 
 
+    
+    long n;
+    while (n = recv(sock_fd, buf, MAX_BYTES_DATA, 0) != 0) { // no termino de mandar sigue recibiendo 
+        if (n < 0) {
+            perror("client socket recv");
+            abort();
+        }
     }
+
 
     // termine de recibir
 
@@ -114,38 +120,53 @@ main(const int argc, char **argv) {
                             numeric_data_array[i] = buf[j++];
                         }
                         numeric_response = ntohl(*(uint32_t*)numeric_data_array);
-
+                        if(args.target.get_target == historic_connections) {
+                            printf("The amount of historic connections is: %d\n", historic_connections);
+                        } else {
+                            printf("The amount of %s is:",  args.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes");
+                        }
+                        break;
                     case proxy_users_list:
                     case admin_users_list:  //pepe0hola0xd0
                         printf("Printing %s user list:  \n", args.target.get_target == proxy_users_list ? "proxy" : "admin");
-                        for (size_t i = 3; i < dlen + 3; i++) {
+                        for (uint16_t i = 3; i < dlen + 3; i++) {
                             if (buf[i] == 0) {
                                 putchar('\n');
                             } else {
                                 putchar(buf[i]);
                             }
                         }
-                        putchar('\n');
+                        putchar('\n'); // el ultimo nombre de la lista no tiene \0
+                        break;
                 default:
                     break;
                 }
             }
             else {
-                printf("CONFIG OK");
+                printf("Tu configuracion al servidor ha sido exitosa!\n");
             }
-
             break;
-        
+        case monitor_resp_status_invalid_version:
+            printf("La version de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_invalid_method:
+            printf("El metodo de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_invalid_target:
+            printf("El target de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_invalid_data:
+            printf("La data de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_error_auth:
+            printf("El token de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_server_error:
+            printf("El servidor no pudo resolver tu request!\n");
+            break;
         default:
             break;
     }
-
-    // if(recv(sock_fd, buf, ) < 0){
-    //     perror("client socket recv");
-    //     return 1;
-    // }
-
-    // parsing -> mostrar respuesta
 
     if(close(sock_fd) < 0){
         perror("client socket close");
