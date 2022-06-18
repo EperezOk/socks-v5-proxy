@@ -85,7 +85,7 @@ main(const int argc, char **argv) {
 
     
     long n; 
-    while (n = recv(sock_fd, buf, MAX_BYTES_DATA, 0) != 0) { // no termino de mandar sigue recibiendo 
+    while ((n = recv(sock_fd, buf, MAX_BYTES_DATA, 0)) != 0) { // no termino de mandar sigue recibiendo 
         if (n < 0) {
             perror("client socket recv");
             abort();
@@ -121,9 +121,9 @@ main(const int argc, char **argv) {
                         }
                         numeric_response = ntohl(*(uint32_t*)numeric_data_array);
                         if(args.target.get_target == historic_connections) {
-                            printf("The amount of historic connections is: %d\n", historic_connections);
+                            printf("The amount of historic connections is: %d\n", numeric_response);
                         } else {
-                            printf("The amount of %s is:",  args.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes");
+                            printf("The amount of %s is: %d",  args.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
                         }
                         break;
                     case proxy_users_list:
