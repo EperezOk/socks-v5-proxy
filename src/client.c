@@ -6,15 +6,13 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-<<<<<<< HEAD
 static void
 serialize_request(struct client_request_args *args, struct client_serialized_request *request);
 
 static void
 serialize_config_data(struct client_request_args *args, struct client_serialized_request *request);
-=======
+
 #define MAX_BYTES_DATA 65536 + 3
->>>>>>> monitornio
 
 int
 main(const int argc, char **argv) {
