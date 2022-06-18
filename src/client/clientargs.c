@@ -65,9 +65,6 @@ username_with_password(char *src, struct config_add_proxy_user *user_params, cha
     str_len++;
     str_len += string_check(password, user_params->pass, "password", PASSWORD_SIZE, progname);
     
-    printf("- username: %s\n", user_params->user);
-    printf("- password: %s\n", user_params->pass);
-    
     return str_len;
 }
 
@@ -85,9 +82,6 @@ username_with_token(char *src, struct config_add_admin_user *admin_params, char 
 
     char* username = strtok(src, ":");
     char* token = separator + 1;
-
-    printf("- username: %s\n", username);
-    printf("- token: %s\n", token);
 
     str_len = string_check(username, admin_params->user, "username", USERNAME_SIZE, progname);
     admin_params->separator = 0;
