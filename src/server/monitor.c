@@ -35,6 +35,7 @@ version(const uint8_t c, struct monitor_parser *p) {
     enum monitor_state next;
     switch (c) {
         case 0x01:
+            remaining_set(p, TOKEN_SIZE);
             next = monitor_token;
             break;
         default:
@@ -345,8 +346,8 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     buffer_write(b, status);
     buffer_write(b, array[1]);
     buffer_write(b, array[0]);
-
-    uint8_t *databytes = (uint8_t *) data;
+                                            // 04 00 00 00
+    uint8_t *databytes = (uint8_t *) data; // 00 00 00 04 -  00 00 00 04
 
     if (databytes == NULL) {
         buffer_write(b, 0);

@@ -206,7 +206,13 @@ main(const int argc, char **argv) {
     }
 
     // TODO: registrar admin default monitoreo (segun parametro REQUERIDO)
-    // monitor_register_admin("root", args.admin_token);
+    char* token = getenv("MONITOR_ROOT_TOKEN");
+    if(token == NULL){
+        fprintf(stderr, "%s: token not present, set it with 'export %s=<token>'.\n", argv[0], "MONITOR_ROOT_TOKEN");
+        exit(1);
+    }
+
+    monitor_register_admin("root", token);
 
     // register proxy users
     for (int i = 0; i < MAX_USERS && args.users[i].name != NULL; i++) {

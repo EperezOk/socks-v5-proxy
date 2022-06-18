@@ -112,7 +112,7 @@ main(const int argc, char **argv) {
                         if(args.target.get_target == historic_connections) {
                             printf("The amount of historic connections is: %d\n", numeric_response);
                         } else {
-                            printf("The amount of %s is: %d",  args.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
+                            printf("The amount of %s is: %d\n",  args.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
                         }
                         break;
                     case proxy_users_list:
@@ -132,26 +132,45 @@ main(const int argc, char **argv) {
                 }
             }
             else {
-                printf("Tu configuracion al servidor ha sido exitosa!\n");
+                switch (args.target.config_target) {
+                    case toggle_disector:
+                        printf("The pop3 password disector is now: %s\n", args.data.disector_data_params == disector_off ? "OFF" : "ON");
+                        break;
+                    case add_proxy_user:
+                        printf("The proxy user: '%s' is now added to the server\n", args.data.add_proxy_user_params.user);
+                        break;
+                    case del_proxy_user:
+                        printf("The proxy user: '%s' is now deleted in the server\n", args.data.add_proxy_user_params.user);
+                        break;
+                    case add_admin_user:
+                        printf("The admin: '%s' is now added in the server\n", args.data.add_proxy_user_params.user);
+                        break;
+                    case del_admin_user:
+                        printf("The admin: '%s' is now deleted in the server\n", args.data.add_proxy_user_params.user);
+                        break;
+                    default:
+                        break;
+                    }
+                
             }
             break;
         case monitor_resp_status_invalid_version:
-            printf("La version de la request que ha mandado es incorrecta!\n");
+            printf("The version of the request you have sent is incorrect!\n");
             break;
         case monitor_resp_status_invalid_method:
-            printf("El metodo de la request que ha mandado es incorrecta!\n");
+            printf("The method of the request you have sent is incorrect!\n");
             break;
         case monitor_resp_status_invalid_target:
-            printf("El target de la request que ha mandado es incorrecta!\n");
+            printf("The target of the request you have sent is incorrect!\n");
             break;
         case monitor_resp_status_invalid_data:
-            printf("La data de la request que ha mandado es incorrecta!\n");
+            printf("The data of the request you have sent is incorrect!\n");
             break;
         case monitor_resp_status_error_auth:
-            printf("El token de la request que ha mandado es incorrecta!\n");
+            printf("The token of the request you have sent is incorrect!\n");
             break;
         case monitor_resp_status_server_error:
-            printf("El servidor no pudo resolver tu request!\n");
+            printf("The server could not resolve your request!\n");
             break;
         default:
             break;

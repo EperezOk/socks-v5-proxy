@@ -242,6 +242,7 @@ monitor_read(struct selector_key *key) {
 static void
 monitor_process(struct selector_key *key, struct monitor_st *d) {
     uint8_t *data = NULL;
+    // uint32_t *data = malloc(sizeof(uint32_t));
     uint16_t dlen = 1;
     int error_response = 0;
 
@@ -255,32 +256,42 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
             switch (d->parser.monitor->target.target_get) {
                 case monitor_target_get_concurrent: {
                     uint32_t cc = socksv5_current_connections();
-                    data = (uint8_t *) &cc;
                     dlen = sizeof(cc);
+                    data = malloc(dlen);
+                    *((uint32_t*)data) = cc;
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_get_historic: {
                     uint32_t hc = socksv5_historic_connections();
-                    data = (uint8_t *) &hc;
                     dlen = sizeof(hc);
+                    data = malloc(dlen);
+                    *((uint32_t*)data) = hc;
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_get_transfered: {
                     uint32_t bt = socksv5_bytes_transferred();
-                    data = (uint8_t *) &bt;
                     dlen = sizeof(bt);
+                    data = malloc(dlen);
+                    *((uint32_t*)data) = bt;
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_get_proxyusers: {
                     char usernames[MAX_USERS * 0xff];
                     dlen = socksv5_get_users(usernames);
-                    data = (uint8_t *) usernames;
+                    data = malloc(dlen);
+                    memcpy(data, usernames, dlen);
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_get_adminusers: {
                     char usernames[MAX_USERS * 0xff];
                     dlen = monitor_get_admins(usernames);
-                    data = (uint8_t *) usernames;
+                    data = malloc(dlen);
+                    memcpy(data, usernames, dlen);
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 default: {
@@ -294,22 +305,31 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                 case monitor_target_config_pop3disector: {
                     bool to = d->parser.monitor->data.disector_data_params == disector_on ? true : false;
                     socksv5_toggle_disector(to);
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_add_proxyuser: {
-                    error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
+                    // error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
+                    error_response = socksv5_register_user("vyeli2", "tefaltacalle");
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_delete_proxyuser: {
-                    error_response = socksv5_unregister_user(d->parser.monitor->data.user);
+                    // error_response = socksv5_unregister_user(d->parser.monitor->data.user);
+                    error_response = socksv5_unregister_user("vyeli2");
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_add_admin: {
-                    error_response = monitor_register_admin(d->parser.monitor->data.add_admin_user_param.user, d->parser.monitor->data.add_admin_user_param.token);
+                    // error_response = monitor_register_admin(d->parser.monitor->data.add_admin_user_param.user, d->parser.monitor->data.add_admin_user_param.token);
+                    error_response = monitor_register_admin("admin2", "mybeautifulbokee");
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_delete_admin: {
-                    error_response = monitor_unregister_admin(d->parser.monitor->data.user);
+                    // error_response = monitor_unregister_admin(d->parser.monitor->data.user);
+                    error_response = monitor_unregister_admin("admin2");
+                    d->status = monitor_status_succeeded;
                     break;
                 }
                 default: {
@@ -330,6 +350,8 @@ finally:
 
     if (-1 == monitor_marshall(d->wb, d->status, dlen, data))
         abort(); // el buffer tiene que ser mas grande en la variable
+
+    free(data);
 }
 
 static void

@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "buffer.h"
 
-#define TOKEN_SIZE 17  // LE PUSE 17 ASI PONGO EL NULL TERMINATED
+#define TOKEN_SIZE 16
 #define DATA_SIZE 8192
 #define USERNAME_SIZE 256
 #define PASSWORD_SIZE 256
@@ -169,6 +169,8 @@ monitor_parser_init(struct monitor_parser *p);
 /**
  * por cada elemento del buffer llama a "monitor_parser_feed" hasta que
  * el parseo se encuentra completo o se requieren mas bytes.
+ * param errored parametro de salida. si es diferente de NULL se deja dicho valor
+ * si el parsing se debio a una condicion de error
  */
 enum monitor_state
 monitor_consume(buffer *b, struct monitor_parser *p);
