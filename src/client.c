@@ -84,7 +84,7 @@ main(const int argc, char **argv) {
 
 
     
-    long n;
+    long n; 
     while (n = recv(sock_fd, buf, MAX_BYTES_DATA, 0) != 0) { // no termino de mandar sigue recibiendo 
         if (n < 0) {
             perror("client socket recv");
@@ -127,7 +127,7 @@ main(const int argc, char **argv) {
                         }
                         break;
                     case proxy_users_list:
-                    case admin_users_list:  //pepe0hola0xd0
+                    case admin_users_list: 
                         printf("Printing %s user list:  \n", args.target.get_target == proxy_users_list ? "proxy" : "admin");
                         for (uint16_t i = 3; i < dlen + 3; i++) {
                             if (buf[i] == 0) {
