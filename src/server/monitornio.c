@@ -254,19 +254,19 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
         case monitor_method_get:
             switch (d->parser.monitor->target.target_get) {
                 case monitor_target_get_concurrent: {
-                    size_t cc = socksv5_current_connections();
+                    uint32_t cc = socksv5_current_connections();
                     data = (uint8_t *) &cc;
                     dlen = sizeof(cc);
                     break;
                 }
                 case monitor_target_get_historic: {
-                    size_t hc = socksv5_historic_connections();
+                    uint32_t hc = socksv5_historic_connections();
                     data = (uint8_t *) &hc;
                     dlen = sizeof(hc);
                     break;
                 }
                 case monitor_target_get_transfered: {
-                    size_t bt = socksv5_bytes_transferred();
+                    uint32_t bt = socksv5_bytes_transferred();
                     data = (uint8_t *) &bt;
                     dlen = sizeof(bt);
                     break;

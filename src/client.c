@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define MAX_BYTES_DATA 65536 + 3
+
 int
 main(const int argc, char **argv) {
     struct client_request_args  args;
@@ -73,7 +75,70 @@ main(const int argc, char **argv) {
     }
     */
 
-    // char buf[2000];
+    uint8_t buf[MAX_BYTES_DATA];
+
+    static uint8_t combinedlen[2] = {0};
+    static uint8_t numeric_data_array[4] = {0};
+
+    static u_int16_t dlen;
+    static uint32_t numeric_response;
+
+    while (recv(sock_fd, buf, MAX_BYTES_DATA, 0) > 0) { // no termino de mandar sigue recibiendo 
+
+    }
+
+    // termine de recibir
+
+    //Valores posibles del campo status en la response del protocolo
+    enum monitor_resp_status {
+        monitor_resp_status_ok              = 0x00,
+        monitor_resp_status_invalid_version = 0x01,
+        monitor_resp_status_invalid_method  = 0x02,
+        monitor_resp_status_invalid_target  = 0x03,
+        monitor_resp_status_invalid_data    = 0x04,
+        monitor_resp_status_error_auth      = 0x05,
+        monitor_resp_status_server_error    = 0x06,
+    };
+
+    switch (buf[0]) {
+        case monitor_resp_status_ok:
+            if (args.method == get) {
+                combinedlen[0] =  buf[1];
+                combinedlen[1] =  buf[2]; 
+                dlen = ntohs(*(uint16_t*)combinedlen); // obtengo el dlen
+                switch (args.target.get_target) {
+                    case historic_connections:      // recibe uint32 (4 bytes)
+                    case concurrent_connections:    // recibe uint32 (4 bytes)
+                    case transferred_bytes:         // recibe uint32 (4 bytes)
+                        for (int i = 0, j = 3; i < 4; i++) {
+                            numeric_data_array[i] = buf[j++];
+                        }
+                        numeric_response = ntohl(*(uint32_t*)numeric_data_array);
+
+                    case proxy_users_list:
+                    case admin_users_list:  //pepe0hola0xd0
+                        printf("Printing %s user list:  \n", args.target.get_target == proxy_users_list ? "proxy" : "admin");
+                        for (size_t i = 3; i < dlen + 3; i++) {
+                            if (buf[i] == 0) {
+                                putchar('\n');
+                            } else {
+                                putchar(buf[i]);
+                            }
+                        }
+                        putchar('\n');
+                default:
+                    break;
+                }
+            }
+            else {
+                printf("CONFIG OK");
+            }
+
+            break;
+        
+        default:
+            break;
+    }
 
     // if(recv(sock_fd, buf, ) < 0){
     //     perror("client socket recv");
