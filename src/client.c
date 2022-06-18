@@ -6,11 +6,15 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+<<<<<<< HEAD
 static void
 serialize_request(struct client_request_args *args, struct client_serialized_request *request);
 
 static void
 serialize_config_data(struct client_request_args *args, struct client_serialized_request *request);
+=======
+#define MAX_BYTES_DATA 65536 + 3
+>>>>>>> monitornio
 
 int
 main(const int argc, char **argv) {
@@ -55,14 +59,105 @@ main(const int argc, char **argv) {
         return 1;
     }
 
-    // char buf[2000];
+    /*
+    if(send(sock_fd, &args, sizeof(args) - sizeof(args.data) + args.dlen, 0) < 0){
+        perror("client socket send");
+        return 1;
+    }
+    */
 
-    // if(recv(sock_fd, buf, ) < 0){
-    //     perror("client socket recv");
-    //     return 1;
-    // }
+    uint8_t buf[MAX_BYTES_DATA];
 
-    // parsing -> mostrar respuesta
+    static uint8_t combinedlen[2] = {0};
+    static uint8_t numeric_data_array[4] = {0};
+    static uint16_t dlen;
+    static uint32_t numeric_response;
+
+
+    
+    long n; 
+    while ((n = recv(sock_fd, buf, MAX_BYTES_DATA, 0)) != 0) { // no termino de mandar sigue recibiendo 
+        if (n < 0) {
+            perror("client socket recv");
+            abort();
+        }
+    }
+
+
+    // termine de recibir
+
+    //Valores posibles del campo status en la response del protocolo
+    enum monitor_resp_status {
+        monitor_resp_status_ok              = 0x00,
+        monitor_resp_status_invalid_version = 0x01,
+        monitor_resp_status_invalid_method  = 0x02,
+        monitor_resp_status_invalid_target  = 0x03,
+        monitor_resp_status_invalid_data    = 0x04,
+        monitor_resp_status_error_auth      = 0x05,
+        monitor_resp_status_server_error    = 0x06,
+    };
+
+    switch (buf[0]) {
+        case monitor_resp_status_ok:
+            if (args.method == get) {
+                combinedlen[0] =  buf[1];
+                combinedlen[1] =  buf[2]; 
+                dlen = ntohs(*(uint16_t*)combinedlen); // obtengo el dlen
+                switch (args.target.get_target) {
+                    case historic_connections:      // recibe uint32 (4 bytes)
+                    case concurrent_connections:    // recibe uint32 (4 bytes)
+                    case transferred_bytes:         // recibe uint32 (4 bytes)
+                        for (int i = 0, j = 3; i < 4; i++) {
+                            numeric_data_array[i] = buf[j++];
+                        }
+                        numeric_response = ntohl(*(uint32_t*)numeric_data_array);
+                        if(args.target.get_target == historic_connections) {
+                            printf("The amount of historic connections is: %d\n", numeric_response);
+                        } else {
+                            printf("The amount of %s is: %d",  args.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
+                        }
+                        break;
+                    case proxy_users_list:
+                    case admin_users_list: 
+                        printf("Printing %s user list:  \n", args.target.get_target == proxy_users_list ? "proxy" : "admin");
+                        for (uint16_t i = 3; i < dlen + 3; i++) {
+                            if (buf[i] == 0) {
+                                putchar('\n');
+                            } else {
+                                putchar(buf[i]);
+                            }
+                        }
+                        putchar('\n'); // el ultimo nombre de la lista no tiene \0
+                        break;
+                default:
+                    break;
+                }
+            }
+            else {
+                printf("Tu configuracion al servidor ha sido exitosa!\n");
+            }
+            break;
+        case monitor_resp_status_invalid_version:
+            printf("La version de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_invalid_method:
+            printf("El metodo de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_invalid_target:
+            printf("El target de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_invalid_data:
+            printf("La data de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_error_auth:
+            printf("El token de la request que ha mandado es incorrecta!\n");
+            break;
+        case monitor_resp_status_server_error:
+            printf("El servidor no pudo resolver tu request!\n");
+            break;
+        default:
+            break;
+    }
 
     if(close(sock_fd) < 0){
         perror("client socket close");

@@ -25,9 +25,9 @@ void socksv5_toggle_disector(bool to);
 void socksv5_pool_destroy(void);
 
 /** consultar estadisticas del servidor */
-size_t socksv5_historic_connections();
-size_t socksv5_current_connections();
-size_t socksv5_bytes_transferred();
+uint32_t socksv5_historic_connections();
+uint32_t socksv5_current_connections();
+uint32_t socksv5_bytes_transferred();
 uint16_t socksv5_get_users(char unames[MAX_USERS * 0xff]);
 
 #endif

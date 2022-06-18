@@ -1,7 +1,7 @@
 /**
  * socks5nio.c  - controla el flujo de un proxy SOCKSv5 (sockets no bloqueantes)
  */
-#include<stdio.h>
+#include <stdio.h>
 #include <stdlib.h>  // malloc
 #include <string.h>  // memset
 #include <assert.h>  // assert
@@ -25,19 +25,19 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 // Estadisticas del servidor proxy a ser consultadas por el protocolo de monitoreo
-size_t historic_connections = 0;
-size_t current_connections  = 0;
-size_t bytes_transferred    = 0;
+uint32_t historic_connections = 0;
+uint32_t current_connections  = 0;
+uint32_t bytes_transferred    = 0;
 
-size_t socksv5_historic_connections() {
+uint32_t socksv5_historic_connections() {
     return historic_connections;
 }
 
-size_t socksv5_current_connections() {
+uint32_t socksv5_current_connections() {
     return current_connections;
 }
 
-size_t socksv5_bytes_transferred() {
+uint32_t socksv5_bytes_transferred() {
     return bytes_transferred;
 }
 
