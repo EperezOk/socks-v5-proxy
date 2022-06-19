@@ -60,10 +60,14 @@ username_with_password(char *src, struct config_add_proxy_user *user_params, cha
     char *username = strtok(src, ":");
     char *password = separator + 1;
 
+    printf("Adding user '%s' of password '%s'", username, password);
+
     str_len = string_check(username, user_params->user, "username", USERNAME_SIZE, progname);
     user_params->separator = 0;
     str_len++;
     str_len += string_check(password, user_params->pass, "password", PASSWORD_SIZE, progname);
+
+    printf(" with length of %ld\n", str_len);
     
     return str_len;
 }
@@ -122,7 +126,7 @@ usage(const char *progname) {
 static void
 set_get_data(struct client_request_args *args) {
     args->method = get;
-    args->dlen = 0;
+    args->dlen = 1;
     args->data.optional_data = 0;
 }
 

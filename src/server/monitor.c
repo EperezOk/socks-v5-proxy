@@ -14,7 +14,7 @@ static int separated = 0;
 static uint8_t combinedlen[2] = {0};
 
 static void
-remaining_set(struct monitor_parser *p, int len) {
+remaining_set(struct monitor_parser *p, uint16_t len) {
     p->i = 0;
     p->len = len; 
 }
@@ -79,7 +79,7 @@ target(const uint8_t c, struct monitor_parser *p) {
     switch(p->monitor->method) {
         case monitor_method_get:
             switch (c) {
-                case   monitor_target_get_historic:
+                case monitor_target_get_historic:
                 case monitor_target_get_concurrent:
                 case monitor_target_get_transfered:
                 case monitor_target_get_proxyusers:

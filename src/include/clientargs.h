@@ -11,7 +11,7 @@
 
 #define DEFAULT_DISECTORS_ENABLED   true
 
-#define DATA_SIZE                   8192
+#define DATA_SIZE                   65536
 #define TOKEN_SIZE                  16
 #define USERNAME_SIZE               0xFF
 #define PASSWORD_SIZE               0xFF
@@ -75,15 +75,6 @@ struct client_request_args {
     union target    target;
     uint16_t        dlen;
     union data      data;
-};
-
-struct client_serialized_request {
-    uint8_t         version;
-    char            token[TOKEN_SIZE];
-    uint8_t         method;
-    uint8_t         target;
-    uint16_t        dlen;
-    uint8_t         data[8192];    
 };
 
 enum ip_version {
