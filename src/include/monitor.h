@@ -189,6 +189,14 @@ monitor_is_done(const enum monitor_state st);
 /*
  * serializa en buff una respuesta al request del protocolo de monitoreo,
  * 
+ * para casos de errores al parsear la request
+ */
+extern int
+monitor_error_marshall(buffer *b, struct monitor_parser *p);
+
+/*
+ * serializa en buff una respuesta al request del protocolo de monitoreo,
+ * 
  * Retorna la cantidad de bytes ocupados del buffer o -1 si no habia 
  * espacio suficiente.
  */

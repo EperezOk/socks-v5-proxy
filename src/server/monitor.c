@@ -330,6 +330,55 @@ monitor_consume(buffer *b, struct monitor_parser *p) {
 }
 
 extern int
+monitor_error_marshall(buffer *b, struct monitor_parser *p) {
+    enum monitor_state st = p->state;
+
+    size_t n;
+    buffer_write_ptr(b, &n);
+
+    if (n < 4)
+        return -1;
+
+    // STATUS
+    switch(st) {
+        case monitor_error_unsupported_version:
+            buffer_write(b, monitor_status_invalid_version);
+            break;
+        case monitor_error_invalid_token:
+            buffer_write(b, monitor_status_error_auth);
+            break;
+        case monitor_error_unsupported_method:
+            buffer_write(b, monitor_status_invalid_method);
+            break;
+        case monitor_error_unsupported_target:
+            buffer_write(b, monitor_status_invalid_target);
+            break;
+        case monitor_error_invalid_data:
+            buffer_write(b, monitor_status_invalid_data);
+            break;
+        default:
+            buffer_write(b, monitor_status_server_error);
+            break;
+    }
+
+    union dlen {
+        uint16_t len;
+        uint8_t byte[2];
+    };
+    union dlen datalen;
+    datalen.len = htons(1); 
+
+    // DLEN
+    buffer_write(b, datalen.byte[0]);
+    buffer_write(b, datalen.byte[1]);
+
+    // DATA
+    buffer_write(b, 0);
+
+    return 4;
+}
+
+extern int
 monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t dlen, void *data, bool numeric_data) {
     // llenar status y dlen primero, checkeando el espacio que hay en el buffer (si te quedas sin espacio en el buffer retornas -1)
     size_t n;

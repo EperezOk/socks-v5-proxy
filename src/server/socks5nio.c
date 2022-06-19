@@ -741,7 +741,7 @@ request_read(struct selector_key *key) {
     if (n > 0) {
         buffer_write_adv(b, n);
         int st = request_consume(b, &d->parser, &error);
-        if (request_is_done(st, 0))
+        if (!error && request_is_done(st, NULL))
             ret = request_process(key, d);
     } else {
         ret = ERROR;
