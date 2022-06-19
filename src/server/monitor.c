@@ -330,7 +330,7 @@ monitor_consume(buffer *b, struct monitor_parser *p) {
 }
 
 extern int
-monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t dlen, void *data) {
+monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t dlen, void *data, bool numeric_data) {
     // llenar status y dlen primero, checkeando el espacio que hay en el buffer (si te quedas sin espacio en el buffer retornas -1)
     size_t n;
     buffer_write_ptr(b, &n);
@@ -338,24 +338,39 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     if (n < (size_t) dlen + 3)
         return -1;
 
-    
+    dlen = htons(dlen);
     uint8_t array[2];
-    array[0]= dlen & 0xff; // menos significativa
-    array[1]=(dlen >> 8);  // mas significativa
+    //Bigendian store most significant from the lowest memory
+    array[1]= dlen & 0xff;
+    array[0]= (dlen >> 8);
+
 
     buffer_write(b, status);
-    buffer_write(b, array[1]);
     buffer_write(b, array[0]);
-                                            // 04 00 00 00
-    uint8_t *databytes = (uint8_t *) data; // 00 00 00 04 -  00 00 00 04
+    buffer_write(b, array[1]);
 
-    if (databytes == NULL) {
-        buffer_write(b, 0);
+
+    uint8_t numeric_response[4];
+
+    if (numeric_data) {
+        uint32_t number = htonl(*((uint32_t*)data));
+        memcpy(numeric_response, &number, sizeof(uint32_t));
+
+        for (int i = 0; i < 4; i++) {
+            buffer_write(b, numeric_response[i]);
+        }
     } else {
-        for (uint16_t i = 0; i < dlen; i++) {
-            buffer_write(b, databytes[i]);
+        uint8_t *databytes = (uint8_t *) data; 
+        if (databytes == NULL) {
+            buffer_write(b, 0);
+        } else {
+            for (uint16_t i = 0; i < dlen; i++) {
+                buffer_write(b, databytes[i]);
+            }
         }
     }
+
+   
 
     return dlen + 3;
 }

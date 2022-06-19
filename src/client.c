@@ -190,8 +190,10 @@ serialize_request(struct client_request_args *args, struct client_serialized_req
     request->version = 1;
     memcpy(request->token, args->token, TOKEN_SIZE);
     request->method = args->method;
-    // request.dlen = htons(args.dlen);
-    request->dlen = args->dlen;
+
+    // SENDING IN NETWORK ORDER
+    request->dlen = htons(args->dlen);
+
 
     // Fields with unions
     switch(request->method){

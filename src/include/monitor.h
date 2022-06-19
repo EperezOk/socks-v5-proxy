@@ -193,6 +193,6 @@ monitor_is_done(const enum monitor_state st);
  * espacio suficiente.
  */
 extern int
-monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t dlen, void *data);
+monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t dlen, void *data, bool numeric_data);
 
 #endif

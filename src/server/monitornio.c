@@ -144,7 +144,7 @@ fail:
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// REQUEST
+// MONITOR REQUEST
 ////////////////////////////////////////////////////////////////////////////////
 
 struct admin {
@@ -244,6 +244,7 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
     uint8_t *data = NULL;
     // uint32_t *data = malloc(sizeof(uint32_t));
     uint16_t dlen = 1;
+    bool numeric_data = false;
     int error_response = 0;
 
     if (!monitor_is_admin(d->parser.monitor->token)) {
@@ -259,6 +260,7 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                     dlen = sizeof(cc);
                     data = malloc(dlen);
                     *((uint32_t*)data) = cc;
+                    numeric_data = true;
                     d->status = monitor_status_succeeded;
                     break;
                 }
@@ -267,6 +269,7 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                     dlen = sizeof(hc);
                     data = malloc(dlen);
                     *((uint32_t*)data) = hc;
+                    numeric_data = true;
                     d->status = monitor_status_succeeded;
                     break;
                 }
@@ -275,6 +278,7 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                     dlen = sizeof(bt);
                     data = malloc(dlen);
                     *((uint32_t*)data) = bt;
+                    numeric_data = true;
                     d->status = monitor_status_succeeded;
                     break;
                 }
@@ -348,7 +352,7 @@ finally:
     if (error_response != 0)
        d->status = monitor_status_invalid_data;
 
-    if (-1 == monitor_marshall(d->wb, d->status, dlen, data))
+    if (-1 == monitor_marshall(d->wb, d->status, dlen, data, numeric_data))
         abort(); // el buffer tiene que ser mas grande en la variable
 
     free(data);
