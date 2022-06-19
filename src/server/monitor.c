@@ -121,7 +121,7 @@ static enum monitor_state
 dlen(const uint8_t c, struct monitor_parser *p) {
     enum monitor_state next;
 
-    if (!remaining_is_done(p)) {
+    if (!remaining_is_done(p) && (p->i == 2 && p->monitor->method == monitor_method_config && p->monitor->target.target_config == monitor_target_config_pop3disector)) {
         combinedlen[p->i++] = c;
         next = monitor_dlen;
     } else {
@@ -384,8 +384,9 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     
     uint8_t array[2];
     //Bigendian store most significant from the lowest memory
-    array[1]= dlen & 0xff;
     array[0]= (dlen >> 8);
+    array[1]= dlen & 0xff;
+    
 
 
     buffer_write(b, status);
