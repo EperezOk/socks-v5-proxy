@@ -337,8 +337,7 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
 
     if (n < (size_t) dlen + 3)
         return -1;
-
-    dlen = htons(dlen);
+    
     uint8_t array[2];
     //Bigendian store most significant from the lowest memory
     array[1]= dlen & 0xff;
@@ -353,6 +352,7 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     uint8_t numeric_response[4];
 
     if (numeric_data) {
+        dlen = htons(dlen);
         uint32_t number = htonl(*((uint32_t*)data));
         memcpy(numeric_response, &number, sizeof(uint32_t));
 
@@ -369,8 +369,6 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
             }
         }
     }
-
-   
 
     return dlen + 3;
 }
