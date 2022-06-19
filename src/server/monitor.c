@@ -121,15 +121,10 @@ static enum monitor_state
 dlen(const uint8_t c, struct monitor_parser *p) {
     enum monitor_state next;
 
-    if (p->i == 0) {
+    if (!remaining_is_done(p)) {
         combinedlen[p->i++] = c;
         next = monitor_dlen;
-    }
-    else if (p->i == 1) {
-        combinedlen[p->i++] = c;
-        next = monitor_dlen;
-    } 
-    else {
+    } else {
         p->monitor->dlen = ntohs(*(uint16_t*)combinedlen); // Para evitar problemas de endianness armo el uint16 de dlen segun el endianness del sistema. (Suponiendo que me los manda en network order "bigendean")
         switch (p->monitor->target.target_config) {
             case monitor_target_config_pop3disector:
