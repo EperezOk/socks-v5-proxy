@@ -1025,29 +1025,28 @@ request_write(struct selector_key *key) {
                 ret = COPY;
                 selector_set_interest(key->s, *d->client_fd, OP_READ);
                 selector_set_interest(key->s, *d->origin_fd, OP_READ);
+                // guardamos estos valores que necesitaremos luego para logear en la etapa posterior
+                memcpy(&ATTACHMENT(key)->dest_addr, &ATTACHMENT(key)->client.request.request.dest_addr, sizeof(union socks_addr));
+                ATTACHMENT(key)->dest_addr_type = ATTACHMENT(key)->client.request.request.dest_addr_type;
+                // aumentamos los stats del servidor
+                historic_connections += 1;
+                current_connections  += 1;
             } else {
                 ret = ERROR;
                 selector_set_interest(key->s, *d->client_fd, OP_NOOP);
                 if (-1 != *d->origin_fd)
                     selector_set_interest(key->s, *d->origin_fd, OP_NOOP);
             }
+
+            log_request(
+                d->status,
+                ATTACHMENT(key)->client_uname,
+                &ATTACHMENT(key)->client.request.request,
+                (const struct sockaddr *) &ATTACHMENT(key)->client_addr,
+                (const struct sockaddr *) &ATTACHMENT(key)->origin_addr
+            );
         }
     }
-
-    log_request(
-        d->status,
-        ATTACHMENT(key)->client_uname,
-        &ATTACHMENT(key)->client.request.request,
-        (const struct sockaddr *) &ATTACHMENT(key)->client_addr,
-        (const struct sockaddr *) &ATTACHMENT(key)->origin_addr
-    );
-
-    // guardamos estos valores que necesitaremos luego para logear en la etapa posterior
-    memcpy(&ATTACHMENT(key)->dest_addr, &ATTACHMENT(key)->client.request.request.dest_addr, sizeof(union socks_addr));
-    ATTACHMENT(key)->dest_addr_type = ATTACHMENT(key)->client.request.request.dest_addr_type;
-
-    historic_connections += 1;
-    current_connections  += 1;
 
     return ret;
 }
@@ -1128,6 +1127,10 @@ copy_r(struct selector_key *key) {
     uint8_t *ptr = buffer_write_ptr(b, &size);
     n = recv(key->fd, ptr, size, 0);
     if (n <= 0) {
+        // si el cliente no va a escribir mas, damos por finalizada la conexion
+        if (key->fd == *ATTACHMENT(key)->client.copy.fd)
+            current_connections -= 1;
+
         shutdown(*d->fd, SHUT_RD); // no leeremos mas de ahi
         d->duplex &= ~OP_READ;
         if (*d->other->fd != -1) {
@@ -1315,8 +1318,6 @@ socksv5_done(struct selector_key* key) {
             close(fds[i]);
         }
     }
-
-    current_connections -= 1;
 }
 
 // ISO-8601 date
