@@ -12,7 +12,9 @@ serialize_request(struct client_request_args *args, char *buffer);
 static void
 serialize_config_data(struct client_request_args *args, char* buffer);
 
-#define MAX_BYTES_DATA          65536 + 3
+#define BASE_RESPONSE_DATA      3
+#define MAX_BYTES_DATA          65536
+#define BASE_REQUEST_DATA       21
 
 #define PROGRAM_VERSION 1
 
@@ -23,8 +25,6 @@ serialize_config_data(struct client_request_args *args, char* buffer);
 #define FIELD_TARGET    18
 #define FIELD_DLEN      19
 #define FIELD_DATA      21
-
-#define BUFFER_SIZE             21 + MAX_BYTES_DATA
 
 int
 main(const int argc, char **argv) {
@@ -61,15 +61,15 @@ main(const int argc, char **argv) {
         }
     }
 
-    char writeBuffer[BUFFER_SIZE];
+    char writeBuffer[BASE_REQUEST_DATA + MAX_BYTES_DATA];
     serialize_request(&args, writeBuffer);
                             // version 1 + token 2 + method 1 + target 1 + dlen 2 + data length
-    if(send(sock_fd, &writeBuffer, BUFFER_SIZE - MAX_BYTES_DATA + args.dlen, 0) < 0){
+    if(send(sock_fd, &writeBuffer, BASE_REQUEST_DATA + args.dlen, 0) < 0){
         perror("client socket send");
         return 1;
     }
 
-    uint8_t buf[MAX_BYTES_DATA];
+    uint8_t buf[BASE_RESPONSE_DATA + MAX_BYTES_DATA];
 
     static uint8_t combinedlen[2] = {0};
     static uint8_t numeric_data_array[4] = {0};
@@ -77,7 +77,7 @@ main(const int argc, char **argv) {
     static uint32_t numeric_response;
     
     long n; 
-    while ((n = recv(sock_fd, buf, MAX_BYTES_DATA, 0)) != 0) { // no termino de mandar sigue recibiendo 
+    while ((n = recv(sock_fd, buf, BASE_RESPONSE_DATA + MAX_BYTES_DATA, 0)) != 0) {
         if (n < 0) {
             perror("client socket recv");
             abort();
@@ -230,8 +230,8 @@ serialize_config_data(struct client_request_args *args, char *buffer){
     switch(args->target.config_target){
         case toggle_disector:
             disector_value = args->data.disector_data_params;
-            memcpy(buffer + FIELD_DATA, &disector_value, sizeof(disector_value));
-            // memcpy(request->data, &disector_value, sizeof(disector_value));
+            memcpy(buffer + FIELD_DATA, &disector_value, sizeof(uint8_t));
+            
             break;
         case add_proxy_user:
             username_len = strlen(args->data.add_proxy_user_params.user);
