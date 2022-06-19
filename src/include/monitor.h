@@ -6,7 +6,7 @@
 #include "buffer.h"
 
 #define TOKEN_SIZE 16
-#define DATA_SIZE 8192
+#define DATA_SIZE 65536
 #define USERNAME_SIZE 256
 #define PASSWORD_SIZE 256
 
@@ -157,9 +157,9 @@ struct monitor_parser {
     struct monitor *monitor;
     enum monitor_state state;
     /** cuantos bytes tenemos que leer*/
-    uint8_t len;
+    uint16_t len;
     /** cuantos bytes ya leimos */
-    uint8_t i;
+    uint16_t i;
 };
 
 /** inicializa el parser */
