@@ -15,7 +15,7 @@ port(const char *s, char* progname) {
     if (end == s|| '\0' != *end 
     || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
         || sl < 0 || sl > USHRT_MAX) {
-        fprintf(stderr, "%s: invalid port %s, should be an integer in the range of 1-65536.\n", progname, s);
+        fprintf(stderr, "%s: invalid port %s, should be an integer in the range of 1-65535.\n", progname, s);
         exit(1);
         return 1;
     }

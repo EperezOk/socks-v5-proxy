@@ -11,7 +11,7 @@
 
 #define DEFAULT_DISECTORS_ENABLED   true
 
-#define DATA_SIZE                   65536
+#define DATA_SIZE                   65535
 #define TOKEN_SIZE                  16
 #define USERNAME_SIZE               0xFF
 #define PASSWORD_SIZE               0xFF

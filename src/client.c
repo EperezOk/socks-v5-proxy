@@ -13,7 +13,7 @@ static void
 serialize_config_data(struct client_request_args *args, char* buffer);
 
 #define BASE_RESPONSE_DATA      3
-#define MAX_BYTES_DATA          65536
+#define MAX_BYTES_DATA          65535
 #define BASE_REQUEST_DATA       21
 
 #define PROGRAM_VERSION 1
