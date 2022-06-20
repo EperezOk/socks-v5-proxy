@@ -33,6 +33,8 @@ struct disector_parser {
 
     /** posicion actual que estamos leyendo */
     uint8_t i;
+    /** para el caso en el que se lea USER <name> y nuevamente USER <name> a continuacion */
+    bool user_carry;
 };
 
 /** inicializa el parser */
