@@ -94,21 +94,21 @@ main(const int argc, char **argv) {
                         case historic_connections:      // recibe uint32 (4 bytes)
                         case concurrent_connections:    // recibe uint32 (4 bytes)
                         case transferred_bytes:         // recibe uint32 (4 bytes)
-                            for (int i = 0, j = 3; i < 4; i++) {
-                                numeric_data_array[i] = buf[j++];
+                            for (int k = 0, j = 3; k < 4; k++) {
+                                numeric_data_array[k] = buf[j++];
                             }
                             numeric_response = ntohl(*(uint32_t*)numeric_data_array);
                             if(args[i].target.get_target == historic_connections) {
-                                printf("The amount of historic connections is: %d\n", numeric_response);
+                                printf("The amount of historic connections is: %u\n", numeric_response);
                             } else {
-                                printf("The amount of %s is: %d\n",  args[i].target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
+                                printf("The amount of %s is: %u\n",  args[i].target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
                             }
                             break;
                         case proxy_users_list:
                         case admin_users_list: 
                             printf("Printing %s user list:  \n", args[i].target.get_target == proxy_users_list ? "proxy" : "admin");
-                            for (uint16_t i = 3; i < dlen + 3; i++) {
-                                if (buf[i] == 0) {
+                            for (uint16_t k = 3; k < dlen + 3; k++) {
+                                if (buf[k] == 0) {
                                     putchar('\n');
                                 } else {
                                     putchar(buf[i]);

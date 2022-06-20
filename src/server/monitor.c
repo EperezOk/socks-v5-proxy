@@ -399,11 +399,9 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     buffer_write(b, response_len.byte[0]);
     buffer_write(b, response_len.byte[1]);
 
-
-    uint8_t numeric_response[4];
-
     if (numeric_data) {
-        
+        uint8_t numeric_response[4];
+
         uint32_t number = htonl(*((uint32_t*)data));
         memcpy(numeric_response, &number, sizeof(uint32_t));
 

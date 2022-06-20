@@ -163,7 +163,6 @@ parse_args(const int argc, char **argv, struct client_request_args *args, char *
     memset(sin4, 0, sizeof(*sin4));
     memset(sin6, 0, sizeof(*sin6));
 
-    int c;
     size_t req_idx;
 
     sin4->sin_family = AF_INET;
@@ -172,7 +171,7 @@ parse_args(const int argc, char **argv, struct client_request_args *args, char *
     *ip_version = ipv4;
 
     for(req_idx = 0 ; req_idx < MAX_CLIENT_REQUESTS ; req_idx++){
-        c = getopt(argc, argv, ":hcCbaAnNu:U:d:D:hv");
+        int c = getopt(argc, argv, ":hcCbaAnNu:U:d:D:hv");
         if (c == -1){
             break;
         }

@@ -78,7 +78,6 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
 
     args->disectors_enabled = true;
 
-    int c;
     int nusers = 0;
 
     while (true) {
@@ -96,7 +95,7 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
             pero falta su valor (getopt retorna '!'). En ambos retornos, el argumento procesado se guarda en 'optopt' y se
             puede usar en los mensajes de error custom.
         */
-        c = getopt(argc, argv, ":hl:L:Np:P:u:v");
+        int c = getopt(argc, argv, ":hl:L:Np:P:u:v");
         if (c == -1)
             break;
 
