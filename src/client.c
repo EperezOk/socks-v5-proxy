@@ -9,18 +9,7 @@
 #include <unistd.h>
 
 #define BASE_RESPONSE_DATA      3
-#define MAX_BYTES_DATA          65535
-#define BASE_REQUEST_DATA       21
 
-#define PROGRAM_VERSION 1
-
-// Serialized buffer fields
-#define FIELD_VERSION   0
-#define FIELD_TOKEN     1
-#define FIELD_METHOD    17
-#define FIELD_TARGET    18
-#define FIELD_DLEN      19
-#define FIELD_DATA      21
 
 int
 main(const int argc, char **argv) {
