@@ -314,7 +314,6 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                 }
                 case monitor_target_config_add_proxyuser: {
                     error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
-                    printf("Agrego al usuario %s con contraseña %s\n", d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
                     // error_response = socksv5_register_user("vyeli2", "tefaltacalle");
                     d->status = monitor_status_succeeded;
                     break;

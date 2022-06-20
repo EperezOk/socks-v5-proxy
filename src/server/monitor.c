@@ -161,8 +161,6 @@ static enum monitor_state
 data(const uint8_t c, struct monitor_parser *p) {
     enum monitor_state next;
 
-    printf("Leo %c\n", c);
-
     switch(p->monitor->target.target_config) { 
         case monitor_target_config_pop3disector:
             p->monitor->data.disector_data_params = c;
