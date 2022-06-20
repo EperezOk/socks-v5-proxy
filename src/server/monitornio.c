@@ -325,14 +325,14 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                     break;
                 }
                 case monitor_target_config_add_admin: {
-                    // error_response = monitor_register_admin(d->parser.monitor->data.add_admin_user_param.user, d->parser.monitor->data.add_admin_user_param.token);
-                    error_response = monitor_register_admin("admin2", "mybeautifulbokee");
+                    error_response = monitor_register_admin(d->parser.monitor->data.add_admin_user_param.user, d->parser.monitor->data.add_admin_user_param.token);
+                    // error_response = monitor_register_admin("admin2", "mybeautifulbokee");
                     d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_delete_admin: {
-                    // error_response = monitor_unregister_admin(d->parser.monitor->data.user);
-                    error_response = monitor_unregister_admin("admin2");
+                    error_response = monitor_unregister_admin(d->parser.monitor->data.user);
+                    // error_response = monitor_unregister_admin("admin2");
                     d->status = monitor_status_succeeded;
                     break;
                 }

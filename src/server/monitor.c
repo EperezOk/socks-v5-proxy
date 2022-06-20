@@ -200,6 +200,7 @@ data(const uint8_t c, struct monitor_parser *p) {
 
             if (remaining_is_done(p)) {
                 p->monitor->data.add_proxy_user_param.pass[p->i] = 0; // null terminated para password
+                printf("Agrego al usuario %s con contraseña %s\n", p->monitor->data.add_proxy_user_param.user, p->monitor->data.add_proxy_user_param.pass);
                 next = monitor_done;
                 break;
             }
@@ -235,12 +236,14 @@ data(const uint8_t c, struct monitor_parser *p) {
                 if (separated == 0) {
                     p->monitor->data.add_admin_user_param.user[p->i++] = c;
                 } else {
-                    p->monitor->data.add_admin_user_param.token[p->i++] = c;
+                    p->monitor->data.add_admin_user_param.token[p->i - username_len_with_null] = c;
+                    p->i++;
                 }
                 next = monitor_data;
             } else if (c == 0 && separated == 0) { // primer separador \0 pongo el null terminated en el username
                 p->monitor->data.add_admin_user_param.user[p->i++] = c;
                 separated = 1;
+                username_len_with_null = p->i;
                 next = monitor_data;
             } else { // Si no es alfanumerico ni fue el primer 0 separador entonces no es un dato valido
                 next = monitor_error_invalid_data;
@@ -394,22 +397,23 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     if (n < (size_t) dlen + 3)
         return -1;
     
-    uint8_t array[2];
-    //Bigendian store most significant from the lowest memory
-    array[0]= (dlen >> 8);
-    array[1]= dlen & 0xff;
+    union response_len {
+        uint16_t len;
+        uint8_t byte[2];
+    };
+    union response_len response_len;
+    response_len.len = htons(dlen); 
     
-
-
     buffer_write(b, status);
-    buffer_write(b, array[0]);
-    buffer_write(b, array[1]);
+    //mando dlen
+    buffer_write(b, response_len.byte[0]);
+    buffer_write(b, response_len.byte[1]);
 
 
     uint8_t numeric_response[4];
 
     if (numeric_data) {
-        dlen = htons(dlen);
+        
         uint32_t number = htonl(*((uint32_t*)data));
         memcpy(numeric_response, &number, sizeof(uint32_t));
 
