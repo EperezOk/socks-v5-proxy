@@ -1196,8 +1196,10 @@ copy_w(struct selector_key *key) {
     copy_compute_interests(key->s, d);
     copy_compute_interests(key->s, d->other);
 
-    if (d->duplex == OP_NOOP)
+    if (d->duplex == OP_NOOP) {
         ret = DONE;
+        current_connections -= 1;
+    }
 
     return ret;
 }
