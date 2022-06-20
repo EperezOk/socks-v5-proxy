@@ -1,4 +1,5 @@
 #include "include/clientargs.h"
+#include "include/clientrequest.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -6,25 +7,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-static void
-serialize_request(struct client_request_args *args, char *buffer);
-
-static void
-serialize_config_data(struct client_request_args *args, char* buffer);
-
 #define BASE_RESPONSE_DATA      3
 #define MAX_BYTES_DATA          65536
-#define BASE_REQUEST_DATA       21
 
-#define PROGRAM_VERSION 1
-
-// Serialized buffer fields
-#define FIELD_VERSION   0
-#define FIELD_TOKEN     1
-#define FIELD_METHOD    17
-#define FIELD_TARGET    18
-#define FIELD_DLEN      19
-#define FIELD_DATA      21
 
 int
 main(const int argc, char **argv) {
@@ -185,77 +170,4 @@ main(const int argc, char **argv) {
     }
 
     return 0;
-}
-
-static void
-serialize_request(struct client_request_args *args, char *buffer){
-    // Fields without unions
-    buffer[FIELD_VERSION] = PROGRAM_VERSION;
-    // token 16 characters
-    memcpy(buffer + FIELD_TOKEN, args->token, TOKEN_SIZE);
-    
-    buffer[FIELD_METHOD] = args->method;
-    // request->method = args->method;
-
-    // SENDING IN NETWORK ORDER
-    uint16_t dlen = htons(args->dlen);
-    memcpy(buffer + FIELD_DLEN, &dlen, sizeof(uint16_t));
-    // request->dlen = htons(args->dlen);
-
-
-    // Fields with unions
-    switch(args->method){
-        case get:
-            memcpy(buffer + FIELD_TARGET, &args->target.get_target, sizeof(uint8_t));
-            memcpy(buffer + FIELD_DATA, &args->data.optional_data, sizeof(uint8_t)); // data = 0 in get case
-            // request->target = args->target.get_target;
-            // memcpy(request->data, &args->data.optional_data, sizeof(uint8_t));
-            break;
-        case config:
-            memcpy(buffer + FIELD_TARGET, &args->target.get_target, sizeof(uint8_t));
-            serialize_config_data(args, buffer);
-            break;
-        default:
-            // no deberia llegar aqui
-            break;
-    }
-}
-
-static void
-serialize_config_data(struct client_request_args *args, char *buffer){
-    uint8_t disector_value;
-    size_t username_len;
-    size_t extra_param_len;
-    
-    switch(args->target.config_target){
-        case toggle_disector:
-            disector_value = args->data.disector_data_params;
-            memcpy(buffer + FIELD_DATA, &disector_value, sizeof(uint8_t));
-            
-            break;
-        case add_proxy_user:
-            username_len = strlen(args->data.add_proxy_user_params.user);
-            memcpy(buffer + FIELD_DATA, args->data.add_proxy_user_params.user, username_len);
-            
-            buffer[FIELD_DATA + username_len] = args->data.add_proxy_user_params.separator;
-            
-            extra_param_len = strlen(args->data.add_proxy_user_params.pass);
-            memcpy(buffer + FIELD_DATA + username_len + 1, args->data.add_proxy_user_params.pass, extra_param_len);
-
-            break;
-        case add_admin_user:
-            username_len = strlen(args->data.add_admin_user_params.user);
-            memcpy(buffer + FIELD_DATA, args->data.add_admin_user_params.user, username_len);
-            
-            buffer[FIELD_DATA + username_len] = args->data.add_admin_user_params.separator;
-            
-            extra_param_len = strlen(args->data.add_admin_user_params.token);
-            memcpy(buffer + FIELD_DATA + username_len + 1, args->data.add_admin_user_params.token, extra_param_len);
-
-            break;
-        case del_proxy_user:
-        case del_admin_user:
-            memcpy(buffer + FIELD_DATA, args->data.user, args->dlen);
-            break;
-    }
 }
