@@ -25,12 +25,12 @@ port(const char *s, char* progname) {
 static void
 user(char *s, struct users *user, char* progname) {
     char *p = strchr(s, ':');
-
+    
     if(p == NULL) {
         fprintf(stderr, "%s: missing password for user %s.\n", progname, s);
         exit(1);
     } else if (s[0] == ':') {
-        fprintf(stderr, "%s: missing username for password %s.\n", progname, p);
+        fprintf(stderr, "%s: missing username for password %s.\n", progname, p+1);
         exit(1);
     } else {
         *p = 0;
@@ -127,6 +127,7 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                     exit(1);
                 } else {
                     user(optarg, args->users + nusers, argv[0]);
+                    printf("Found user #%d '%c' of value %s", optind, c, optarg);
                     nusers++;
                 }
                 break;

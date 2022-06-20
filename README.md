@@ -1,4 +1,4 @@
-# SOCKSv5 Protocol
+# SOCKSv5 Protocol Server
 
 ## Introduction
 
@@ -26,6 +26,11 @@ This repository consists in the implementation of a proxy server for this protoc
  - Implement an access log that allows an administrator to understand each user access.
  - Monitor traffic and generate an access credential log like ettercap for at least POP3.
 
+## Usage
+
+To compile both the server and client run "make" or "make all". Both will be generated on the root folder.
+
+To get more information about the options of both run them with the flag "-h".
 
 ## Authors
 - 61490 - Baliarda Gonzalo

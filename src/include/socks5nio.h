@@ -16,11 +16,18 @@ void socksv5_passive_accept(struct selector_key *key);
  */
 int socksv5_register_user(char *uname, char *passwd);
 
+int socksv5_unregister_user(char *uname);
+
 /** prende/apaga el disector de passwords pop3 */
-void
-toggle_disector(bool to);
+void socksv5_toggle_disector(bool to);
 
 /** libera pools internos */
 void socksv5_pool_destroy(void);
+
+/** consultar estadisticas del servidor */
+uint32_t socksv5_historic_connections();
+uint32_t socksv5_current_connections();
+uint32_t socksv5_bytes_transferred();
+uint16_t socksv5_get_users(char unames[MAX_USERS * 0xff]);
 
 #endif

@@ -26,6 +26,7 @@
 
 #include "include/selector.h"
 #include "include/socks5nio.h"
+#include "include/monitornio.h"
 #include "include/args.h"
 
 #define MAX_CONNECTIONS 512
@@ -57,34 +58,63 @@ main(const int argc, char **argv) {
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
 
-    struct in_addr ipv4_addr;
-    int server_v4 = FD_UNUSED;
+    struct in_addr server_ipv4_addr, monitor_ipv4_addr;
+    int server_v4 = FD_UNUSED, monitor_v4 = FD_UNUSED;
 
-    struct in6_addr ipv6_addr;
-    int server_v6 = FD_UNUSED;
+    struct in6_addr server_ipv6_addr, monitor_ipv6_addr;
+    int server_v6 = FD_UNUSED, monitor_v6 = FD_UNUSED;
 
-    if(inet_pton(AF_INET, args.socks_addr, &ipv4_addr) == 1){       // if parsing to ipv4 succeded
-        server_v4 = bind_ipv4_socket(ipv4_addr, args.socks_port);
+    // socket pasivo socks IPv4
+    if(inet_pton(AF_INET, args.socks_addr, &server_ipv4_addr) == 1){       // if parsing to ipv4 succeded
+        server_v4 = bind_ipv4_socket(server_ipv4_addr, args.socks_port);
         if (server_v4 < 0) {
-            err_msg = "unable to create IPv4 socket";
+            err_msg = "unable to create IPv4 socks socket";
             goto finally;
         }
-        fprintf(stdout, "Listening IPv4 socks on TCP port %d\n", args.socks_port);
+        fprintf(stdout, "Socks: listening on IPv4 TCP port %d\n", args.socks_port);
     }
 
+    // socket pasivo monitoreo IPv4
+    if(inet_pton(AF_INET, args.mng_addr, &monitor_ipv4_addr) == 1) {
+        monitor_v4 = bind_ipv4_socket(monitor_ipv4_addr, args.mng_port);
+        if (monitor_v4 < 0) {
+            err_msg = "unable to create IPv4 monitor socket";
+            goto finally;
+        }
+        fprintf(stdout, "Monitor: listening on IPv4 TCP port %d\n", args.mng_port);
+    }
+
+     // socket pasivo socks IPv6
     char* ipv6_addr_text = args.is_default_socks_addr ? DEFAULT_SOCKS_ADDR_V6 : args.socks_addr;
 
-    if((!IS_FD_USED(server_v4) || args.is_default_socks_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &ipv6_addr) == 1)){
-        server_v6 = bind_ipv6_socket(ipv6_addr, args.socks_port);
+    if((!IS_FD_USED(server_v4) || args.is_default_socks_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &server_ipv6_addr) == 1)){
+        server_v6 = bind_ipv6_socket(server_ipv6_addr, args.socks_port);
         if (server_v6 < 0) {
             err_msg = "unable to create IPv6 socket";
             goto finally;
         }
-        fprintf(stdout, "Listening IPv6 socks on TCP port %d\n", args.socks_port);
+        fprintf(stdout, "Socks: listening on IPv6 TCP port %d\n", args.socks_port);
+    }
+
+     // socket pasivo monitoreo IPv6
+     ipv6_addr_text = args.is_default_mng_addr ? DEFAULT_CONF_ADDR_V6 : args.mng_addr;
+
+    if((!IS_FD_USED(monitor_v4) || args.is_default_mng_addr) && (inet_pton(AF_INET6, ipv6_addr_text, &monitor_ipv6_addr) == 1)){
+        monitor_v6 = bind_ipv6_socket(monitor_ipv6_addr, args.mng_port);
+        if (monitor_v6 < 0) {
+            err_msg = "unable to create IPv6 socket";
+            goto finally;
+        }
+        fprintf(stdout, "Monitor: listening on IPv6 TCP port %d\n", args.mng_port);
     }
     
     if(!IS_FD_USED(server_v4) && !IS_FD_USED(server_v6)) {
-        fprintf(stderr, "unable to parse server ip\n");
+        fprintf(stderr, "unable to parse socks server ip\n");
+        goto finally;
+    }
+
+    if(!IS_FD_USED(monitor_v4) && !IS_FD_USED(monitor_v6)) {
+        fprintf(stderr, "unable to parse monitor server ip\n");
         goto finally;
     }
 
@@ -95,12 +125,22 @@ main(const int argc, char **argv) {
 
     // seteamos los sockets pasivos como no bloqueantes
     if(IS_FD_USED(server_v4) && (selector_fd_set_nio(server_v4) == -1)){
-        err_msg = "getting server ipv4 socket flags";
+        err_msg = "getting socks server ipv4 socket flags";
         goto finally;
     }
 
     if(IS_FD_USED(server_v6) && (selector_fd_set_nio(server_v6) == -1)) {
-        err_msg = "getting server ipv6 socket flags";
+        err_msg = "getting socks server ipv6 socket flags";
+        goto finally;
+    }
+
+    if(IS_FD_USED(monitor_v4) && (selector_fd_set_nio(monitor_v4) == -1)){
+        err_msg = "getting monitor server ipv4 socket flags";
+        goto finally;
+    }
+
+    if(IS_FD_USED(monitor_v6) && (selector_fd_set_nio(monitor_v6) == -1)) {
+        err_msg = "getting monitor server ipv6 socket flags";
         goto finally;
     }
 
@@ -132,17 +172,47 @@ main(const int argc, char **argv) {
     if(IS_FD_USED(server_v4)){
         ss = selector_register(selector, server_v4, &socksv5, OP_READ, NULL);
         if(ss != SELECTOR_SUCCESS) {
-            err_msg = "registering IPv4 fd";
+            err_msg = "registering IPv4 socks fd";
             goto finally;
         }
     }
     if(IS_FD_USED(server_v6)){
         ss = selector_register(selector, server_v6, &socksv5, OP_READ, NULL);
         if(ss != SELECTOR_SUCCESS) {
-            err_msg = "registering IPv6 fd";
+            err_msg = "registering IPv6 socks fd";
             goto finally;
         }
     }
+
+    const struct fd_handler monitor = {
+        .handle_read       = monitor_passive_accept,
+        .handle_write      = NULL,
+        .handle_close      = NULL,
+    };
+
+    if(IS_FD_USED(monitor_v4)){
+        ss = selector_register(selector, monitor_v4, &monitor, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv4 monitor fd";
+            goto finally;
+        }
+    }
+    if(IS_FD_USED(monitor_v6)){
+        ss = selector_register(selector, monitor_v6, &monitor, OP_READ, NULL);
+        if(ss != SELECTOR_SUCCESS) {
+            err_msg = "registering IPv6 monitor fd";
+            goto finally;
+        }
+    }
+
+    // TODO: registrar admin default monitoreo (segun parametro REQUERIDO)
+    char* token = getenv("MONITOR_ROOT_TOKEN");
+    if(token == NULL){
+        fprintf(stderr, "%s: token not present, set it with 'export %s=<token>'.\n", argv[0], "MONITOR_ROOT_TOKEN");
+        exit(1);
+    }
+
+    monitor_register_admin("root", token);
 
     // register proxy users
     for (int i = 0; i < MAX_USERS && args.users[i].name != NULL; i++) {
@@ -154,7 +224,7 @@ main(const int argc, char **argv) {
     }
 
     if (!args.disectors_enabled)
-        toggle_disector(false);
+        socksv5_toggle_disector(false);
 
     printf("\n----------------------- LOGS -----------------------\n\n");
     // termina con un ctrl + C pero dejando un mensajito
@@ -191,6 +261,7 @@ finally:
     selector_close();
 
     socksv5_pool_destroy();
+    connection_pool_destroy();
 
     if (server_v4 >= 0)
         close(server_v4);
