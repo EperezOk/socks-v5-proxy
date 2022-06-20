@@ -111,7 +111,7 @@ main(const int argc, char **argv) {
                                 if (buf[k] == 0) {
                                     putchar('\n');
                                 } else {
-                                    putchar(buf[i]);
+                                    putchar(buf[k]);
                                 }
                             }
                             putchar('\n'); // el ultimo nombre de la lista no tiene \0
