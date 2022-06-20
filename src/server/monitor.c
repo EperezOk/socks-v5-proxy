@@ -3,6 +3,8 @@
  */
 #include <string.h> //memset
 #include <arpa/inet.h> //ntohs
+#include <stdio.h>
+#include <stdio.h> // printf
 
 #include "../include/monitor.h"
 
@@ -116,15 +118,19 @@ target(const uint8_t c, struct monitor_parser *p) {
     return next;
 }
 
+// byte:    0 1 0
+// i:     0 1 2
+// cLen:    [0 1]
+
 //Si llego aca estamos con un target de tipo config
 static enum monitor_state
 dlen(const uint8_t c, struct monitor_parser *p) {
     enum monitor_state next;
 
-    if (!remaining_is_done(p) && (p->i == 2 && p->monitor->method == monitor_method_config && p->monitor->target.target_config == monitor_target_config_pop3disector)) {
-        combinedlen[p->i++] = c;
-        next = monitor_dlen;
-    } else {
+    combinedlen[p->i++] = c;
+    next = monitor_dlen;
+
+    if (remaining_is_done(p)) {
         p->monitor->dlen = ntohs(*(uint16_t*)combinedlen); // Para evitar problemas de endianness armo el uint16 de dlen segun el endianness del sistema. (Suponiendo que me los manda en network order "bigendean")
         switch (p->monitor->target.target_config) {
             case monitor_target_config_pop3disector:
@@ -151,7 +157,7 @@ dlen(const uint8_t c, struct monitor_parser *p) {
                 break;
         }
     }
-    
+
     return next;
 }
 
