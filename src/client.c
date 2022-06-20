@@ -76,7 +76,7 @@ main(const int argc, char **argv) {
     static uint16_t dlen;
     static uint32_t numeric_response;
     
-    long n; 
+    long n = -1; 
     while ((n = recv(sock_fd, buf, BASE_RESPONSE_DATA + MAX_BYTES_DATA, 0)) != 0) {
         if (n < 0) {
             perror("client socket recv");

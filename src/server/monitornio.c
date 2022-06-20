@@ -198,7 +198,7 @@ static uint16_t monitor_get_admins(char unames[MAX_ADMINS * 0xff]) {
         strcpy(unames + dlen, admins[i].uname);
         dlen += strlen(admins[i].uname) + 1; // incluimos el \0
     }
-    return dlen - 1; // no pone el ultimo \0
+    return dlen > 1 ? dlen - 1 : 0; // no pone el ultimo \0
 }
 
 static bool
@@ -314,25 +314,21 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                 }
                 case monitor_target_config_add_proxyuser: {
                     error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
-                    // error_response = socksv5_register_user("vyeli2", "tefaltacalle");
                     d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_delete_proxyuser: {
                     error_response = socksv5_unregister_user(d->parser.monitor->data.user);
-                    // error_response = socksv5_unregister_user("vyeli2");
                     d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_add_admin: {
                     error_response = monitor_register_admin(d->parser.monitor->data.add_admin_user_param.user, d->parser.monitor->data.add_admin_user_param.token);
-                    // error_response = monitor_register_admin("admin2", "mybeautifulbokee");
                     d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_delete_admin: {
                     error_response = monitor_unregister_admin(d->parser.monitor->data.user);
-                    // error_response = monitor_unregister_admin("admin2");
                     d->status = monitor_status_succeeded;
                     break;
                 }

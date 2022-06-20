@@ -597,7 +597,7 @@ uint16_t socksv5_get_users(char unames[MAX_USERS * 0xff]) {
         strcpy(unames + dlen, users[i].uname);
         dlen += strlen(users[i].uname) + 1; // incluimos el \0
     }
-    return dlen - 1; // no pone el ultimo \0
+    return dlen > 1 ? dlen - 1 : 0; // no pone el ultimo \0
 }
 
 /** inicializa las variables de los estados AUTH_ */
