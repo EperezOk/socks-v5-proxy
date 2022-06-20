@@ -10,7 +10,6 @@
 #define BASE_RESPONSE_DATA      3
 #define MAX_BYTES_DATA          65536
 
-
 int
 main(const int argc, char **argv) {
     struct client_request_args  args;

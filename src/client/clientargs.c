@@ -7,6 +7,8 @@
 
 #include "../include/clientargs.h"
 
+#define  EXTRA_PARAMS 3
+
 
 static unsigned short
 port(const char *s, char* progname) {
@@ -31,6 +33,35 @@ token_check(const char *src, char *dest_token, char *progname){
     }
     memcpy(dest_token, src, TOKEN_SIZE);
     return TOKEN_SIZE;
+}
+
+static enum ip_version
+ip_check(const char* src, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, char* progname){
+    if(inet_pton(AF_INET, src, &sin4->sin_addr) > 0){
+        sin4->sin_family = AF_INET;
+        return ipv4;
+    } else if(inet_pton(AF_INET6, src, &sin6->sin6_addr.s6_addr) > 0) {
+        sin6->sin6_family = AF_INET6;
+        return ipv6;
+    } else {
+        fprintf(stderr, "%s: invalid ip %s sent.\n", progname, src);
+        exit(1);
+    }
+}
+
+static void
+port_check(const char* src, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version, char* progname){
+    if(*ip_version != ipv4 && *ip_version != ipv6){
+        fprintf(stderr, "%s: invalid ip sent.\n", progname);
+        exit(1);
+    }
+
+    uint16_t network_port = htons(port(src, progname));
+    if(*ip_version == ipv4){
+        sin4->sin_port = network_port;
+    } else {
+        sin6->sin6_port = network_port;
+    }
 }
 
 static size_t
@@ -99,7 +130,7 @@ version(void) {
 static void
 usage(const char *progname) {
     fprintf(stderr,
-        "Usage: %s [OPTIONS] [DESTINATION] [PORT]\n"
+        "Usage: %s [OPTIONS]... TOKEN [DESTINATION] [PORT]\n"
         "Options:\n"
         "-h                 imprime los comandos del programa.\n"
         "-c                 imprime la cantidad de conexiones concurrentes del server.\n"
@@ -247,33 +278,33 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
         }
     }
 
-    for ( ; optind < argc ; optind++){
-        if(argc - optind == 1) {                        // port (field in ipv4 and ipv6 structs is on same memory place)
-            if(*ip_version == ipv4)
-                sin4->sin_port = htons(port(argv[optind], argv[0]));
-            else
-                sin6->sin6_port = htons(port(argv[optind], argv[0]));
-        }
-        else if(argc - optind == 2) {                   // destination ip
-            if(inet_pton(AF_INET, argv[optind], &sin4->sin_addr) > 0){
-                sin4->sin_family = AF_INET;
-                *ip_version = ipv4;
-            } else if(inet_pton(AF_INET6, argv[optind], &sin6->sin6_addr.s6_addr) > 0) {
-                sin6->sin6_family = AF_INET6;
-                *ip_version = ipv6;
-            } else {
-                printf("error parsing ip\n");
-                exit(1);
-            }
-        }
-    }
-
-    // Token parsing
-    char* token = getenv(TOKEN_ENV_VAR_NAME);
-    if(token == NULL){
-        fprintf(stderr, "%s: token not present, set it with 'export %s=<token>'.\n", argv[0], TOKEN_ENV_VAR_NAME);
+    if(optind == argc){
+        fprintf(stderr, "%s: missing token for client request.\n", argv[0]);
         exit(1);
     }
-    token_check(getenv("MONITOR_TOKEN"), args->token, argv[0]);
+
+    int runs = 0;
+
+    do {
+        switch(runs)
+        {
+            case 0:
+                token_check(argv[optind], args->token, argv[0]);
+                break;
+            case 1:
+                *ip_version = ip_check(argv[optind], sin4, sin6, argv[0]);
+                break;
+            case 2:
+                port_check(argv[optind], sin4, sin6, ip_version, argv[0]);
+                break;
+        }
+        runs++;
+        optind++;
+    } while(runs < EXTRA_PARAMS && optind < argc);
+
+    if(optind < argc){
+        fprintf(stderr, "%s: sent too many arguments. run '%s -h' for more information.\n", argv[0], argv[0]);
+        exit(1);
+    }
 
 }

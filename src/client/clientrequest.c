@@ -7,34 +7,26 @@ serialize_config_data(struct client_request_args *args, char* buffer);
 
 void
 serialize_request(struct client_request_args *args, char *buffer){
-    // Fields without unions
     buffer[FIELD_VERSION_INDEX] = PROGRAM_VERSION;
-    // token 16 characters
     memcpy(FIELD_TOKEN(buffer), args->token, TOKEN_SIZE);
     
     buffer[FIELD_METHOD_INDEX] = args->method;
-    // request->method = args->method;
 
-    // SENDING IN NETWORK ORDER
+    // Sending in network order
     uint16_t dlen = htons(args->dlen);
     memcpy(FIELD_DLEN(buffer), &dlen, sizeof(uint16_t));
-    // request->dlen = htons(args->dlen);
 
-
-    // Fields with unions
     switch(args->method){
         case get:
             memcpy(FIELD_TARGET(buffer), &args->target.get_target, sizeof(uint8_t));
             memcpy(FIELD_DATA(buffer), &args->data.optional_data, sizeof(uint8_t)); // data = 0 in get case
-            // request->target = args->target.get_target;
-            // memcpy(request->data, &args->data.optional_data, sizeof(uint8_t));
             break;
         case config:
             memcpy(FIELD_TARGET(buffer), &args->target.get_target, sizeof(uint8_t));
             serialize_config_data(args, buffer);
             break;
         default:
-            // no deberia llegar aqui
+            // should not get here
             break;
     }
 }
