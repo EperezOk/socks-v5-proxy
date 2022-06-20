@@ -4,20 +4,19 @@
 #define TO_UPPER(c) ((c) >= 'a' ? (c) - ('a' - 'A') : (c))
 
 static char *search[] = { "+OK", "USER ", "PASS ", "+OK" };
-static bool user_carry = false;
 
 extern void
 disector_parser_reset(struct disector_parser *p) {
     p->state = disector_user;
-    p->i     = user_carry ? 1 : 0;
-    user_carry = false;
+    p->i     = p->user_carry ? 1 : 0;
+    p->user_carry = false;
 }
 
 extern void
 disector_parser_init(struct disector_parser *p) {
     p->state = disector_wait_pop;
     p->i     = 0;
-    user_carry = false;
+    p->user_carry = false;
     memset(&p->disector, 0, sizeof(p->disector));
 }
 
@@ -66,7 +65,7 @@ password(const uint8_t c, struct disector_parser *p) {
         p->i++;
     } else {
         if (TO_UPPER(c) == search[1][0])
-            user_carry = true;  // esta letra matchea para la keyword USER, asi que la marcamos como valida para la siguiente iteracion
+            p->user_carry = true;  // esta letra matchea para la keyword USER, asi que la marcamos como valida para la siguiente iteracion
         return disector_restart;
     }
     
