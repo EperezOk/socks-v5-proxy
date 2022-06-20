@@ -143,6 +143,10 @@ union data {
     struct config_add_admin_user    add_admin_user_param;
 };
 
+union data_len {
+        uint16_t len;
+        uint8_t byte[2];
+};
 
 struct monitor {
     char                    token[TOKEN_SIZE];
@@ -160,6 +164,7 @@ struct monitor_parser {
     uint16_t len;
     /** cuantos bytes ya leimos */
     uint16_t i;
+    int separated;
 };
 
 /** inicializa el parser */

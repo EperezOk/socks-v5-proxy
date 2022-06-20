@@ -11,7 +11,6 @@
 
 #define IS_ALNUM(x) (x>='a' && (x) <= 'z') || (x>='A' && x <= 'Z') || (x>='0' && x <= '9')
 
-static int separated = 0;
 
 static uint8_t combinedlen[2] = {0};
 static size_t username_len_with_null = 0;
@@ -119,10 +118,6 @@ target(const uint8_t c, struct monitor_parser *p) {
     return next;
 }
 
-// byte:    0 1 0
-// i:     0 1 2
-// cLen:    [0 1]
-
 //Si llego aca estamos con un target de tipo config
 static enum monitor_state
 dlen(const uint8_t c, struct monitor_parser *p) {
@@ -166,6 +161,8 @@ static enum monitor_state
 data(const uint8_t c, struct monitor_parser *p) {
     enum monitor_state next;
 
+    printf("Leo %c\n", c);
+
     switch(p->monitor->target.target_config) { 
         case monitor_target_config_pop3disector:
             p->monitor->data.disector_data_params = c;
@@ -181,16 +178,16 @@ data(const uint8_t c, struct monitor_parser *p) {
             // user0pass
 
             if (IS_ALNUM(c)) {
-                if (separated == 0) {
+                if (p->separated == 0) {
                     p->monitor->data.add_proxy_user_param.user[p->i++] = c;
                 } else {
                     p->monitor->data.add_proxy_user_param.pass[p->i - username_len_with_null] = c; //pass[0] = c
                     p->i++;
                 }
                 next = monitor_data;
-            } else if (c == 0 && separated == 0) { // primer separador \0 pongo el null terminated en el username
+            } else if (c == 0 && p->separated == 0) { // primer separador \0 pongo el null terminated en el username
                 p->monitor->data.add_proxy_user_param.user[p->i++] = c;
-                separated = 1;
+                p->separated = 1;
                 username_len_with_null = p->i;
                 next = monitor_data;
             } else { // Si no es alfanumerico ni fue el primer 0 separador entonces no es un dato valido
@@ -200,8 +197,8 @@ data(const uint8_t c, struct monitor_parser *p) {
 
             if (remaining_is_done(p)) {
                 p->monitor->data.add_proxy_user_param.pass[p->i] = 0; // null terminated para password
-                printf("Agrego al usuario %s con contraseña %s\n", p->monitor->data.add_proxy_user_param.user, p->monitor->data.add_proxy_user_param.pass);
                 next = monitor_done;
+                p->separated = 0;
                 break;
             }
 
@@ -233,16 +230,16 @@ data(const uint8_t c, struct monitor_parser *p) {
             }
 
             if (IS_ALNUM(c)) {
-                if (separated == 0) {
+                if (p->separated == 0) {
                     p->monitor->data.add_admin_user_param.user[p->i++] = c;
                 } else {
                     p->monitor->data.add_admin_user_param.token[p->i - username_len_with_null] = c;
                     p->i++;
                 }
                 next = monitor_data;
-            } else if (c == 0 && separated == 0) { // primer separador \0 pongo el null terminated en el username
+            } else if (c == 0 && p->separated == 0) { // primer separador \0 pongo el null terminated en el username
                 p->monitor->data.add_admin_user_param.user[p->i++] = c;
-                separated = 1;
+                p->separated = 1;
                 username_len_with_null = p->i;
                 next = monitor_data;
             } else { // Si no es alfanumerico ni fue el primer 0 separador entonces no es un dato valido
@@ -253,6 +250,7 @@ data(const uint8_t c, struct monitor_parser *p) {
             if (remaining_is_done(p)) {
                 p->monitor->data.add_admin_user_param.token[p->i] = 0; // null terminated para password
                 next = monitor_done;
+                p->separated = 0;
                 break;
             }
             
@@ -371,11 +369,8 @@ monitor_error_marshall(buffer *b, struct monitor_parser *p) {
             break;
     }
 
-    union dlen {
-        uint16_t len;
-        uint8_t byte[2];
-    };
-    union dlen datalen;
+   
+    union data_len datalen;
     datalen.len = htons(1); 
 
     // DLEN
@@ -397,11 +392,8 @@ monitor_marshall(buffer *b, const enum monitor_response_status status, uint16_t 
     if (n < (size_t) dlen + 3)
         return -1;
     
-    union response_len {
-        uint16_t len;
-        uint8_t byte[2];
-    };
-    union response_len response_len;
+   
+    union data_len response_len;
     response_len.len = htons(dlen); 
     
     buffer_write(b, status);
