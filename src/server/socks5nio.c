@@ -375,7 +375,7 @@ socksv5_pool_destroy(void) {
     struct socks5 *next, *s;
     for(s = pool; s != NULL ; s = next) {
         next = s->next;
-        free(s);
+        socks5_destroy_(s);
     }
 }
 
