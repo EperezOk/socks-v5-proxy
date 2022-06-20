@@ -70,7 +70,6 @@ union data {
 };
 
 struct client_request_args {
-    char            token[TOKEN_SIZE];
     enum method     method;
     union target    target;
     uint16_t        dlen;
@@ -87,7 +86,7 @@ enum ip_version {
  * args con defaults o la seleccion humana. Puede cortar
  * la ejecución.
  */
-void 
-parse_args(const int argc, char **argv, struct client_request_args *args, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version);
+size_t
+parse_args(const int argc, char **argv, struct client_request_args *args, char *token, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version);
 
 #endif

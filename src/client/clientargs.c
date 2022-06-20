@@ -6,7 +6,9 @@
 #include <getopt.h>
 
 #include "../include/clientargs.h"
+#include "../include/client.h"
 
+#define  EXTRA_PARAMS 2
 
 static unsigned short
 port(const char *s, char* progname) {
@@ -31,6 +33,35 @@ token_check(const char *src, char *dest_token, char *progname){
     }
     memcpy(dest_token, src, TOKEN_SIZE);
     return TOKEN_SIZE;
+}
+
+static enum ip_version
+ip_check(const char* src, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, char* progname){
+    if(inet_pton(AF_INET, src, &sin4->sin_addr) > 0){
+        sin4->sin_family = AF_INET;
+        return ipv4;
+    } else if(inet_pton(AF_INET6, src, &sin6->sin6_addr.s6_addr) > 0) {
+        sin6->sin6_family = AF_INET6;
+        return ipv6;
+    } else {
+        fprintf(stderr, "%s: invalid ip %s sent.\n", progname, src);
+        exit(1);
+    }
+}
+
+static void
+port_check(const char* src, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version, char* progname){
+    if(*ip_version != ipv4 && *ip_version != ipv6){
+        fprintf(stderr, "%s: invalid ip sent.\n", progname);
+        exit(1);
+    }
+
+    uint16_t network_port = htons(port(src, progname));
+    if(*ip_version == ipv4){
+        sin4->sin_port = network_port;
+    } else {
+        sin6->sin6_port = network_port;
+    }
 }
 
 static size_t
@@ -99,7 +130,7 @@ version(void) {
 static void
 usage(const char *progname) {
     fprintf(stderr,
-        "Usage: %s [OPTIONS] [DESTINATION] [PORT]\n"
+        "Usage: %s [OPTIONS]... TOKEN [DESTINATION] [PORT]\n"
         "Options:\n"
         "-h                 imprime los comandos del programa.\n"
         "-c                 imprime la cantidad de conexiones concurrentes del server.\n"
@@ -126,34 +157,21 @@ set_get_data(struct client_request_args *args) {
     args->data.optional_data = 0;
 }
 
-void 
-parse_args(const int argc, char **argv, struct client_request_args *args, struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version) {
-    memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users, ademas de poner los campos opcionales en 0 (y el separator)
+size_t
+parse_args(const int argc, char **argv, struct client_request_args *args, char *token,struct sockaddr_in *sin4, struct sockaddr_in6 *sin6, enum ip_version *ip_version) {
+    // memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users, ademas de poner los campos opcionales en 0 (y el separator)
     memset(sin4, 0, sizeof(*sin4));
     memset(sin6, 0, sizeof(*sin6));
 
     int c;
+    size_t req_idx;
 
     sin4->sin_family = AF_INET;
     sin4->sin_port = htons(port(DEFAULT_CONF_PORT, argv[0]));
     inet_pton(AF_INET, DEFAULT_CONF_ADDR, &sin4->sin_addr);
     *ip_version = ipv4;
 
-    while (1) {
-        /*
-            Uso: getopt(argc, argv, optstring)
-            - argc, argv: Los de consola
-            - optstring: String con los caracteres de las opciones válidas concatenados. Pueden tener 2 formatos:
-                - '<opcion>'    ->  Para opciones sin argumentos (ej: "./socks5d -h")
-                - '<opcion>:'   ->  Para opciones con argumentos (ej: "./socks5d -p9999")
-                - '<opcion>::'  ->  Para opciones con argumentos opcionales (No tenemos asi que no se usa)
-            En el caso de que se lea una opcion válida se incrementa la variable 'optind' y se guarda el valor del
-            argumento leido en 'optarg' si tiene argumento, sino se setea en 0 (optarg = NULL).
-            Además, se puede aregar un ':' al principio del string, así los errores no se imprimen en pantalla. Esto sirve
-            para diferenciar cuando el error es por argumento invalido (getopt retorna '?') o que el argumento es valido
-            pero falta su valor (getopt retorna '!'). En ambos retornos, el argumento procesado se guarda en 'optopt' y se
-            puede usar en los mensajes de error custom.
-        */
+    for(req_idx = 0 ; req_idx < MAX_CLIENT_REQUESTS ; req_idx++){
         c = getopt(argc, argv, ":hcCbaAnNu:U:d:D:hv");
         if (c == -1){
             break;
@@ -165,68 +183,68 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
                 break;
             case 'c':
                 // Get concurrent connections
-                set_get_data(args);
-                args->target.get_target = concurrent_connections;
+                set_get_data(&args[req_idx]);
+                args[req_idx].target.get_target = concurrent_connections;
                 break;
             case 'C':
                 // Get historic connections
-                set_get_data(args);
-                args->target.get_target = historic_connections;
+                set_get_data(&args[req_idx]);
+                args[req_idx].target.get_target = historic_connections;
                 break;
             case 'b':
                 // Get bytes transferred
-                set_get_data(args);
-                args->target.get_target = transferred_bytes;
+                set_get_data(&args[req_idx]);
+                args[req_idx].target.get_target = transferred_bytes;
                 break;
             case 'a':
                 // Get list of proxy users
-                set_get_data(args);
-                args->target.get_target = proxy_users_list;
+                set_get_data(&args[req_idx]);
+                args[req_idx].target.get_target = proxy_users_list;
                 // TODO: Show list of proxy users
                 break;
             case 'A':
                 // Get list of admin users
-                set_get_data(args);
-                args->target.get_target = admin_users_list;
+                set_get_data(&args[req_idx]);
+                args[req_idx].target.get_target = admin_users_list;
                 // TODO: Show list of admin users
                 break;
             case 'n':
                 // Turns on password disector
-                args->method = config;
-                args->target.config_target = toggle_disector;
-                args->dlen = 1;
-                args->data.disector_data_params = disector_on;
+                args[req_idx].method = config;
+                args[req_idx].target.config_target = toggle_disector;
+                args[req_idx].dlen = 1;
+                args[req_idx].data.disector_data_params = disector_on;
                 break;
             case 'N':
                 // Turns off password disector
-                args->method = config;
-                args->target.config_target = toggle_disector;
-                args->dlen = 1;
-                args->data.disector_data_params = disector_off;
+                args[req_idx].method = config;
+                args[req_idx].target.config_target = toggle_disector;
+                args[req_idx].dlen = 1;
+                args[req_idx].data.disector_data_params = disector_off;
                 break;
             case 'u':
                 // Adds proxy user
-                args->method = config;
-                args->target.config_target = add_proxy_user;
-                args->dlen = username_with_password(optarg, &args->data.add_proxy_user_params, argv[0]);
+                args[req_idx].method = config;
+                args[req_idx].target.config_target = add_proxy_user;
+                args[req_idx].dlen = username_with_password(optarg, &args[req_idx].data.add_proxy_user_params, argv[0]);
                 break;
             case 'U':
                 // Adds admin user
-                args->method = config;
-                args->target.config_target = add_admin_user;
-                args->dlen = username_with_token(optarg, &args->data.add_admin_user_params, argv[0]);
+                args[req_idx].method = config;
+                args[req_idx].target.config_target = add_admin_user;
+                args[req_idx].dlen = username_with_token(optarg, &args[req_idx].data.add_admin_user_params, argv[0]);
                 break;
             case 'd':
                 // Deletes proxy user
-                args->method = config;
-                args->target.config_target = del_proxy_user;
-                args->dlen = string_check(optarg, args->data.user, "username", USERNAME_SIZE, argv[0]);
+                args[req_idx].method = config;
+                args[req_idx].target.config_target = del_proxy_user;
+                args[req_idx].dlen = string_check(optarg, args[req_idx].data.user, "username", USERNAME_SIZE, argv[0]);
                 break;
             case 'D':
                 // Deletes admin user
-                args->method = config;
-                args->target.config_target = del_admin_user;
-                args->dlen = string_check(optarg, args->data.user, "username", USERNAME_SIZE, argv[0]);
+                args[req_idx].method = config;
+                args[req_idx].target.config_target = del_admin_user;
+                args[req_idx].dlen = string_check(optarg, args[req_idx].data.user, "username", USERNAME_SIZE, argv[0]);
                 break;
             case 'v':
                 // Prints program version
@@ -247,33 +265,34 @@ parse_args(const int argc, char **argv, struct client_request_args *args, struct
         }
     }
 
-    for ( ; optind < argc ; optind++){
-        if(argc - optind == 1) {                        // port (field in ipv4 and ipv6 structs is on same memory place)
-            if(*ip_version == ipv4)
-                sin4->sin_port = htons(port(argv[optind], argv[0]));
-            else
-                sin6->sin6_port = htons(port(argv[optind], argv[0]));
-        }
-        else if(argc - optind == 2) {                   // destination ip
-            if(inet_pton(AF_INET, argv[optind], &sin4->sin_addr) > 0){
-                sin4->sin_family = AF_INET;
-                *ip_version = ipv4;
-            } else if(inet_pton(AF_INET6, argv[optind], &sin6->sin6_addr.s6_addr) > 0) {
-                sin6->sin6_family = AF_INET6;
-                *ip_version = ipv6;
-            } else {
-                printf("error parsing ip\n");
-                exit(1);
-            }
-        }
-    }
-
-    // Token parsing
-    char* token = getenv(TOKEN_ENV_VAR_NAME);
-    if(token == NULL){
-        fprintf(stderr, "%s: token not present, set it with 'export %s=<token>'.\n", argv[0], TOKEN_ENV_VAR_NAME);
+    if(optind == argc){
+        fprintf(stderr, "%s: missing token for client request.\n", argv[0]);
         exit(1);
     }
-    token_check(getenv("MONITOR_TOKEN"), args->token, argv[0]);
 
+    int extra_runs = 0;
+
+    do {
+        switch(extra_runs)
+        {
+            case 0:
+                token_check(argv[optind], token, argv[0]);
+                break;
+            case 1:
+                *ip_version = ip_check(argv[optind], sin4, sin6, argv[0]);
+                break;
+            case 2:
+                port_check(argv[optind], sin4, sin6, ip_version, argv[0]);
+                break;
+        }
+        extra_runs++;
+        optind++;
+    } while(extra_runs < EXTRA_PARAMS && optind < argc);
+
+    if(optind < argc){
+        fprintf(stderr, "%s: sent too many arguments. run '%s -h' for more information.\n", argv[0], argv[0]);
+        exit(1);
+    }
+
+    return req_idx;
 }
