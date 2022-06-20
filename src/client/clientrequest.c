@@ -6,9 +6,9 @@ static void
 serialize_config_data(struct client_request_args *args, char* buffer);
 
 void
-serialize_request(struct client_request_args *args, char *buffer){
+serialize_request(struct client_request_args *args, char* token, char *buffer){
     buffer[FIELD_VERSION_INDEX] = PROGRAM_VERSION;
-    memcpy(FIELD_TOKEN(buffer), args->token, TOKEN_SIZE);
+    memcpy(FIELD_TOKEN(buffer), token, TOKEN_SIZE);
     
     buffer[FIELD_METHOD_INDEX] = args->method;
 

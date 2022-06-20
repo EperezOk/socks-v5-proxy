@@ -1,3 +1,6 @@
+#ifndef CLIENTREQUEST_H
+#define CLIENTREQUEST_H
+
 #define PROGRAM_VERSION             1
 
 #define BASE_REQUEST_DATA           21
@@ -18,4 +21,6 @@
 #define FIELD_DATA(mem_pos)         mem_pos + FIELD_DATA_INDEX
 
 void
-serialize_request(struct client_request_args *args, char *buffer);
+serialize_request(struct client_request_args *args, char *token, char *buffer);
+
+#endif
