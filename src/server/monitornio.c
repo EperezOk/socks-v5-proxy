@@ -232,7 +232,13 @@ monitor_read(struct selector_key *key) {
         buffer_write_adv(b, n);
         int st = monitor_consume(b, &d->parser);
         if (monitor_is_done(st)) {
-            monitor_process(key, d);    // ejecuta la accion pedida y escribe la response en el buffer
+            if (st >= monitor_error) {
+                if (-1 == monitor_error_marshall(d->wb, &d->parser)) {
+                    abort();
+                }
+            } else {
+                monitor_process(key, d);    // ejecuta la accion pedida y escribe la response en el buffer
+            }
             selector_set_interest_key(key, OP_WRITE);   // pasamos al monitor_write() cuando podamos escribir
         }
     }
