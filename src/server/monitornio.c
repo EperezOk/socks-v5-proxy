@@ -232,12 +232,7 @@ monitor_read(struct selector_key *key) {
         buffer_write_adv(b, n);
         int st = monitor_consume(b, &d->parser);
         if (monitor_is_done(st)) {
-            if (st >= monitor_error) {
-                if (-1 == monitor_error_marshall(d->wb, &d->parser))
-                    abort();
-            }            
-            else
-                monitor_process(key, d);    // ejecuta la accion pedida y escribe la response en el buffer
+            monitor_process(key, d);    // ejecuta la accion pedida y escribe la response en el buffer
             selector_set_interest_key(key, OP_WRITE);   // pasamos al monitor_write() cuando podamos escribir
         }
     }
@@ -318,14 +313,14 @@ monitor_process(struct selector_key *key, struct monitor_st *d) {
                     break;
                 }
                 case monitor_target_config_add_proxyuser: {
-                    // error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
-                    error_response = socksv5_register_user("vyeli2", "tefaltacalle");
+                    error_response = socksv5_register_user(d->parser.monitor->data.add_proxy_user_param.user, d->parser.monitor->data.add_proxy_user_param.pass);
+                    // error_response = socksv5_register_user("vyeli2", "tefaltacalle");
                     d->status = monitor_status_succeeded;
                     break;
                 }
                 case monitor_target_config_delete_proxyuser: {
-                    // error_response = socksv5_unregister_user(d->parser.monitor->data.user);
-                    error_response = socksv5_unregister_user("vyeli2");
+                    error_response = socksv5_unregister_user(d->parser.monitor->data.user);
+                    // error_response = socksv5_unregister_user("vyeli2");
                     d->status = monitor_status_succeeded;
                     break;
                 }

@@ -14,6 +14,7 @@
 static int separated = 0;
 
 static uint8_t combinedlen[2] = {0};
+static size_t username_len_with_null = 0;
 
 static void
 remaining_set(struct monitor_parser *p, uint16_t len) {
@@ -177,45 +178,50 @@ data(const uint8_t c, struct monitor_parser *p) {
                 next = monitor_error_invalid_data;
                 break;
             }
-
-            if (remaining_is_done(p)) {
-                p->monitor->data.add_proxy_user_param.pass[p->i++] = 0; // null terminated para password
-                next = monitor_done;
-                break;
-            }
+            // user0pass
 
             if (IS_ALNUM(c)) {
                 if (separated == 0) {
                     p->monitor->data.add_proxy_user_param.user[p->i++] = c;
                 } else {
-                    p->monitor->data.add_proxy_user_param.pass[p->i++] = c;
+                    p->monitor->data.add_proxy_user_param.pass[p->i - username_len_with_null] = c; //pass[0] = c
+                    p->i++;
                 }
+                next = monitor_data;
             } else if (c == 0 && separated == 0) { // primer separador \0 pongo el null terminated en el username
                 p->monitor->data.add_proxy_user_param.user[p->i++] = c;
                 separated = 1;
+                username_len_with_null = p->i;
+                next = monitor_data;
             } else { // Si no es alfanumerico ni fue el primer 0 separador entonces no es un dato valido
                 next = monitor_error_invalid_data;
                 break;
             }
-            
-            next = monitor_data;
-            break;
 
-        case monitor_target_config_delete_proxyuser:
             if (remaining_is_done(p)) {
-                p->monitor->data.user[p->i++] = 0; // null terminated para username
+                p->monitor->data.add_proxy_user_param.pass[p->i] = 0; // null terminated para password
                 next = monitor_done;
                 break;
             }
-        
+
+            break;
+
+        case monitor_target_config_delete_proxyuser:
+            
             if (IS_ALNUM(c)) {
                 p->monitor->data.user[p->i++] = c;
+                next = monitor_data;
             } else {
                 next = monitor_error_invalid_data;
                 break;
-            } 
+            }
 
-            next = monitor_data;
+            if (remaining_is_done(p)) {
+                p->monitor->data.user[p->i] = 0; // null terminated para username
+                next = monitor_done;
+                break;
+            }
+            
             break;
 
         case monitor_target_config_add_admin:
@@ -225,47 +231,47 @@ data(const uint8_t c, struct monitor_parser *p) {
                 break;
             }
 
-            if (remaining_is_done(p)) {
-                p->monitor->data.add_admin_user_param.token[p->i++] = 0; // null terminated para password
-                next = monitor_done;
-                break;
-            }
-
             if (IS_ALNUM(c)) {
                 if (separated == 0) {
                     p->monitor->data.add_admin_user_param.user[p->i++] = c;
                 } else {
                     p->monitor->data.add_admin_user_param.token[p->i++] = c;
                 }
+                next = monitor_data;
             } else if (c == 0 && separated == 0) { // primer separador \0 pongo el null terminated en el username
                 p->monitor->data.add_admin_user_param.user[p->i++] = c;
                 separated = 1;
+                next = monitor_data;
             } else { // Si no es alfanumerico ni fue el primer 0 separador entonces no es un dato valido
                 next = monitor_error_invalid_data;
                 break;
             }
-            
-            next = monitor_data;
-            break;
 
-        case monitor_target_config_delete_admin:
-             if (remaining_is_done(p)) {
-                p->monitor->data.user[p->i++] = 0; // null terminated para username
+            if (remaining_is_done(p)) {
+                p->monitor->data.add_admin_user_param.token[p->i] = 0; // null terminated para password
                 next = monitor_done;
                 break;
             }
-        
+            
+            break;
+
+        case monitor_target_config_delete_admin:
             if (IS_ALNUM(c)) {
                 p->monitor->data.user[p->i++] = c;
+                next = monitor_data;
             } else {
                 next = monitor_error_invalid_data;
                 break;
-            } 
+            }
 
-            next = monitor_data;
+            if (remaining_is_done(p)) {
+                p->monitor->data.user[p->i] = 0; // null terminated para username
+                next = monitor_done;
+                break;
+            }
+            
             break;
     }
-
 
     return next;
 }

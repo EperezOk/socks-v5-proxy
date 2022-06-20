@@ -128,7 +128,7 @@ enum config_disector_data {
 
 struct config_add_proxy_user {
     char        user[USERNAME_SIZE];
-    char        pass[PASSWORD_SIZE];
+    char        pass[PASSWORD_SIZE]; 
 };
 
 struct config_add_admin_user {
