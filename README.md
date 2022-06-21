@@ -28,7 +28,7 @@ This repository consists in the implementation of a proxy server for this protoc
 
 ## Usage
 
-To compile both the server and client run "make" or "make all". Both will be generated on the root folder.
+To compile both the server and client run "make" or "make all". Both will be generated on the root folder with the names of "socks5d" for the server and "client" for the client.
 
 To get more information about the options of both run them with the flag "-h".
 
@@ -36,7 +36,7 @@ To get more information about the options of both run them with the flag "-h".
 
 This project's report is located on the root folder, on the file "Informe.pdf".
 
-The RFC of the monitor protocol designed, "RFC protocolo monitoreo.pdf", is also located on the root folder, as it is mentioned on the report. This was included in the project to make clear each of the protocol's options, on both requests and responses.
+The RFC of the monitor protocol designed, "RFC protocolo monitoreo.pdf", is also located on the root folder. This was included in the project to make clear each of the protocol's options, on both requests and responses, along with some examples on how to operate with it.
 
 ## Authors
 - 61490 - Baliarda Gonzalo
