@@ -38,6 +38,8 @@ This project's report is located on the root folder, on the file "Informe.pdf".
 
 The RFC of the monitor protocol designed, "RFC protocolo monitoreo.pdf", is also located on the root folder. This was included in the project to make clear each of the protocol's options, on both requests and responses, along with some examples on how to operate with it.
 
+Also included on the root folder is a man page, which explains all of the server options and run format. To open it, run "man ./socks5d.8" on the root folder of the project.
+
 ## Authors
 - 61490 - Baliarda Gonzalo
 - 61475 - Perez Ezequiel
