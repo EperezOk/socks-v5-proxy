@@ -24,6 +24,8 @@
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
+#define RAW_BUFFER_SIZE 1024
+
 // Estadisticas del servidor proxy a ser consultadas por el protocolo de monitoreo
 uint32_t historic_connections = 0;
 uint32_t current_connections  = 0;
@@ -287,7 +289,7 @@ struct socks5 {
 
     /** buffers para ser usados read_buffer, write_buffer */
     // Los mismos se van reusando para todos los estados (van quedando limpios luego de cada transicion), y deberian tener al menos 10 bytes de tamaño para poder almacenar una request_marshall() completa.
-    uint8_t raw_buff_a[1024], raw_buff_b[1024];
+    uint8_t raw_buff_a[RAW_BUFFER_SIZE], raw_buff_b[RAW_BUFFER_SIZE];
     buffer read_buffer, write_buffer;
 
     /** cantidad de referencias a este objeto. si es 1 se debe destruir. */
