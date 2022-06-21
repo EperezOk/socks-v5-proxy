@@ -8,7 +8,7 @@
 #include "../include/clientargs.h"
 #include "../include/client.h"
 
-#define  EXTRA_PARAMS 2
+#define  EXTRA_PARAMS 3
 
 static unsigned short
 port(const char *s, char* progname) {
