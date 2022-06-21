@@ -28,9 +28,47 @@ This repository consists in the implementation of a proxy server for this protoc
 
 ## Usage
 
-To compile both the server and client run "make" or "make all". Both will be generated on the root folder with the names of "socks5d" for the server and "client" for the client.
+To compile both the server and client run "make" or "make all".
 
-To get more information about the options of both run them with the flag "-h".
+```sh
+user@USER:~/socksv5-protocol$ make all
+```
+
+Both will be generated on the root folder with the names of "socks5d" for the server and "client" for the client.
+
+To get more information about the options of both run them with the flag "-h". Below there is an extract of both commands' help page.
+
+```sh
+user@USER:~/socksv5-protocol$ ./socks5d -h
+Usage: ./socks5d [OPTION]...
+   -h              Imprime la ayuda y termina.
+   -l<SOCKS addr>  Dirección donde servirá el proxy SOCKS. Por defecto escucha en todas las interfaces.
+   -N              Deshabilita los passwords disectors.
+   -L<conf  addr>  Dirección donde servirá el servicio de management. Por defecto escucha solo en loopback.
+   -p<SOCKS port>  Puerto TCP para conexiones entrantes SOCKS. Por defecto es 1080.
+   -P<conf  port>  Puerto TCP para conexiones entrantes del protocolo de configuracion. Por defecto es 8080.
+   -u<user>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.
+   -v              Imprime información sobre la versión y termina.
+```
+
+```sh
+user@USER:~/socksv5-protocol$ ./client -h
+Usage: ./client [OPTIONS]... TOKEN [DESTINATION] [PORT]
+Options:
+-h                  imprime los comandos del programa y termina.
+-c                  imprime la cantidad de conexiones concurrentes del server.
+-C                  imprime la cantidad de conexiones históricas del server.
+-b                  imprime la cantidad de bytes transferidos del server.
+-a                  imprime una lista con los usuarios del proxy.
+-A                  imprime una lista con los usuarios administradores.
+-n                  enciende el password disector en el server.
+-N                  apaga el password disector en el server.
+-u <user:pass>      agrega un usuario del proxy con el nombre y contraseña indicados.
+-U <user:token>     agrega un usuario administrador con el nombre y token indicados.
+-d <user>           borra el usuario del proxy con el nombre indicado.
+-D <user>           borra el usuario administrador con el nombre indicado.
+-v                  imprime la versión del programa y termina.
+````
 
 ## Files
 
