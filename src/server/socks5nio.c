@@ -377,7 +377,7 @@ socksv5_pool_destroy(void) {
     struct socks5 *next, *s;
     for(s = pool; s != NULL ; s = next) {
         next = s->next;
-        free(s);
+        socks5_destroy_(s);
     }
 }
 
@@ -1129,10 +1129,6 @@ copy_r(struct selector_key *key) {
     uint8_t *ptr = buffer_write_ptr(b, &size);
     n = recv(key->fd, ptr, size, 0);
     if (n <= 0) {
-        // si el cliente no va a escribir mas, damos por finalizada la conexion
-        if (key->fd == *ATTACHMENT(key)->client.copy.fd)
-            current_connections -= 1;
-
         shutdown(*d->fd, SHUT_RD); // no leeremos mas de ahi
         d->duplex &= ~OP_READ;
         if (*d->other->fd != -1) {
@@ -1146,8 +1142,10 @@ copy_r(struct selector_key *key) {
     copy_compute_interests(key->s, d);
     copy_compute_interests(key->s, d->other);
 
-    if (d->duplex == OP_NOOP)
+    if (d->duplex == OP_NOOP) {
         ret = DONE;
+        current_connections -= 1;
+    }
 
     return ret;
 }
@@ -1200,8 +1198,10 @@ copy_w(struct selector_key *key) {
     copy_compute_interests(key->s, d);
     copy_compute_interests(key->s, d->other);
 
-    if (d->duplex == OP_NOOP)
+    if (d->duplex == OP_NOOP) {
         ret = DONE;
+        current_connections -= 1;
+    }
 
     return ret;
 }

@@ -265,9 +265,12 @@ finally:
 
     if (server_v4 >= 0)
         close(server_v4);
-
     if(server_v6 >= 0)
         close(server_v6);
+    if (monitor_v4 >= 0)
+        close(monitor_v4);
+    if(monitor_v6 >= 0)
+        close(monitor_v6);
 
     return ret;
 }
