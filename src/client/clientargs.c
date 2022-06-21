@@ -132,19 +132,19 @@ usage(const char *progname) {
     fprintf(stderr,
         "Usage: %s [OPTIONS]... TOKEN [DESTINATION] [PORT]\n"
         "Options:\n"
-        "-h                 imprime los comandos del programa.\n"
-        "-c                 imprime la cantidad de conexiones concurrentes del server.\n"
-        "-C                 imprime la cantidad de conexiones históricas del server.\n"
-        "-b                 imprime la cantidad de bytes transferidos del server.\n"
-        "-a                 imprime una lista con los usuarios del proxy.\n"
-        "-A                 imprime una lista con los usuarios administradores.\n"
-        "-n                 enciende el password disector en el server.\n"
-        "-N                 apaga el password disector en el server.\n"
-        "-u<user:pass>      agrega un usuario del proxy con el nombre y contraseña indicados.\n"
-        "-U<user:token>     agrega un usuario administrador con el nombre y token indicados.\n"
-        "-d<user>           borra el usuario del proxy con el nombre indicado.\n"
-        "-D<user>           borra el usuario administrador con el nombre indicado.\n"
-        "-v                 imprime la versión del programa.\n"
+        "-h                  imprime los comandos del programa y termina.\n"
+        "-c                  imprime la cantidad de conexiones concurrentes del server.\n"
+        "-C                  imprime la cantidad de conexiones históricas del server.\n"
+        "-b                  imprime la cantidad de bytes transferidos del server.\n"
+        "-a                  imprime una lista con los usuarios del proxy.\n"
+        "-A                  imprime una lista con los usuarios administradores.\n"
+        "-n                  enciende el password disector en el server.\n"
+        "-N                  apaga el password disector en el server.\n"
+        "-u <user:pass>      agrega un usuario del proxy con el nombre y contraseña indicados.\n"
+        "-U <user:token>     agrega un usuario administrador con el nombre y token indicados.\n"
+        "-d <user>           borra el usuario del proxy con el nombre indicado.\n"
+        "-D <user>           borra el usuario administrador con el nombre indicado.\n"
+        "-v                  imprime la versión del programa y termina.\n"
         "\n",
         progname);
     exit(1);
@@ -179,6 +179,7 @@ parse_args(const int argc, char **argv, struct client_request_args *args, char *
         switch (c) {
             case 'h':
                 usage(argv[0]);
+                exit(0);
                 break;
             case 'c':
                 // Get concurrent connections
@@ -248,6 +249,7 @@ parse_args(const int argc, char **argv, struct client_request_args *args, char *
             case 'v':
                 // Prints program version
                 version();
+                exit(0);
                 break;
             case ':':
                 fprintf(stderr, "%s: missing value for option -%c.\n", argv[0], optopt);
