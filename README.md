@@ -32,6 +32,12 @@ To compile both the server and client run "make" or "make all". Both will be gen
 
 To get more information about the options of both run them with the flag "-h".
 
+## Files
+
+This project's report is located on the root folder, on the file "Informe.pdf".
+
+The RFC of the monitor protocol designed, "RFC protocolo monitoreo.pdf", is also located on the root folder, as it is mentioned on the report. This was included in the project to make clear each of the protocol's options, on both requests and responses.
+
 ## Authors
 - 61490 - Baliarda Gonzalo
 - 61475 - Perez Ezequiel
