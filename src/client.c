@@ -1,12 +1,7 @@
 #include "include/client.h"
-#include "include/clientargs.h"
-#include "include/clientrequest.h"
 
 #include <string.h>
-#include <stdio.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <unistd.h>
 
 #define BASE_RESPONSE_DATA      3
 
@@ -26,7 +21,6 @@ main(const int argc, char **argv) {
 
     static uint8_t combinedlen[2] = {0};
     static uint8_t numeric_data_array[4] = {0};
-    static uint16_t dlen;
     static uint32_t numeric_response;
 
     // socket -> connect -> send -> recv -> close
@@ -86,62 +80,10 @@ main(const int argc, char **argv) {
 
         switch (buf[0]) {
             case monitor_resp_status_ok:
-                if (args[i].method == get) {
-                    combinedlen[0] =  buf[1];
-                    combinedlen[1] =  buf[2]; 
-                    dlen = ntohs(*(uint16_t*)combinedlen); // obtengo el dlen
-                    switch (args[i].target.get_target) {
-                        case historic_connections:      // recibe uint32 (4 bytes)
-                        case concurrent_connections:    // recibe uint32 (4 bytes)
-                        case transferred_bytes:         // recibe uint32 (4 bytes)
-                            for (int i = 0, j = 3; i < 4; i++) {
-                                numeric_data_array[i] = buf[j++];
-                            }
-                            numeric_response = ntohl(*(uint32_t*)numeric_data_array);
-                            if(args[i].target.get_target == historic_connections) {
-                                printf("The amount of historic connections is: %d\n", numeric_response);
-                            } else {
-                                printf("The amount of %s is: %d\n",  args[i].target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", numeric_response);
-                            }
-                            break;
-                        case proxy_users_list:
-                        case admin_users_list: 
-                            printf("Printing %s user list:  \n", args[i].target.get_target == proxy_users_list ? "proxy" : "admin");
-                            for (uint16_t i = 3; i < dlen + 3; i++) {
-                                if (buf[i] == 0) {
-                                    putchar('\n');
-                                } else {
-                                    putchar(buf[i]);
-                                }
-                            }
-                            putchar('\n'); // el ultimo nombre de la lista no tiene \0
-                            break;
-                    default:
-                        break;
-                    }
-                }
-                else {
-                    switch (args[i].target.config_target) {
-                        case toggle_disector:
-                            printf("The pop3 password disector is now: %s\n", args[i].data.disector_data_params == disector_off ? "OFF" : "ON");
-                            break;
-                        case add_proxy_user:
-                            printf("The proxy user: '%s' is now added to the server\n", args[i].data.add_proxy_user_params.user);
-                            break;
-                        case del_proxy_user:
-                            printf("The proxy user: '%s' is now deleted in the server\n", args[i].data.add_proxy_user_params.user);
-                            break;
-                        case add_admin_user:
-                            printf("The admin: '%s' is now added in the server\n", args[i].data.add_proxy_user_params.user);
-                            break;
-                        case del_admin_user:
-                            printf("The admin: '%s' is now deleted in the server\n", args[i].data.add_proxy_user_params.user);
-                            break;
-                        default:
-                            break;
-                        }
-                    
-                }
+                if (args[i].method == get) 
+                    handle_get_ok_status(args[i], buf, combinedlen, numeric_data_array, &numeric_response); 
+                else
+                    handle_config_ok_status(args[i]);
                 break;
             case monitor_resp_status_invalid_version:
                 printf("The version of the request you have sent is incorrect!\n");
@@ -178,4 +120,59 @@ main(const int argc, char **argv) {
     }
 
     return 0;
+}
+
+void handle_get_ok_status(struct client_request_args arg, uint8_t *buf, uint8_t *combinedlen, uint8_t *numeric_data_array, uint32_t *numeric_response) {
+    combinedlen[0] = buf[1];
+    combinedlen[1] = buf[2]; 
+    uint16_t dlen = ntohs(*(uint16_t*)combinedlen); // obtengo el dlen
+    switch (arg.target.get_target) {
+        case historic_connections:      // recibe uint32 (4 bytes)
+        case concurrent_connections:    // recibe uint32 (4 bytes)
+        case transferred_bytes:         // recibe uint32 (4 bytes)
+            for (int k = 0, j = 3; k < 4; k++) {
+                numeric_data_array[k] = buf[j++];
+            }
+            *numeric_response = ntohl(*(uint32_t*)numeric_data_array);
+            if(arg.target.get_target == historic_connections) {
+                printf("The amount of historic connections is: %u\n", *numeric_response);
+            } else {
+                printf("The amount of %s is: %u\n",  arg.target.get_target == concurrent_connections ? "concurrent connections" : "transferred bytes", *numeric_response);
+            }
+            break;
+        case proxy_users_list:
+        case admin_users_list: 
+            printf("Printing %s user list:  \n", arg.target.get_target == proxy_users_list ? "proxy" : "admin");
+            for (uint16_t k = 3; k < dlen + 3; k++) {
+                if (buf[k] == 0) {
+                    putchar('\n');
+                } else {
+                    putchar(buf[k]);
+                }
+            }
+            putchar('\n'); // el ultimo nombre de la lista no tiene \0
+            break;
+    default:
+        break;
+    }
+}
+
+void handle_config_ok_status(struct client_request_args arg) {
+    switch (arg.target.config_target) {
+        case toggle_disector:
+            printf("The pop3 password disector is now: %s\n", arg.data.disector_data_params == disector_off ? "OFF" : "ON");
+            break;
+        case add_proxy_user:
+            printf("The proxy user: '%s' is now added to the server\n", arg.data.add_proxy_user_params.user);
+            break;
+        case del_proxy_user:
+            printf("The proxy user: '%s' is now deleted in the server\n", arg.data.add_proxy_user_params.user);
+            break;
+        case add_admin_user:
+            printf("The admin: '%s' is now added in the server\n", arg.data.add_proxy_user_params.user);
+            break;
+        case del_admin_user:
+            printf("The admin: '%s' is now deleted in the server\n", arg.data.add_proxy_user_params.user);
+            break;
+    }      
 }
