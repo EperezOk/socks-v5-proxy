@@ -21,14 +21,13 @@ This repository consists in the implementation of a proxy server for this protoc
 	 - Historical amount of connections
 	 - Concurrent amount of connections
 	 - Amount of bytes transfered
-	 -  
  - Implement mechanisms that allow managing users and change server configuration in runtime
  - Implement an access log that allows an administrator to understand each user access.
  - Monitor traffic and generate an access credential log like ettercap for at least POP3.
 
 ## Usage
 
-To compile both the server and client run "make" or "make all".
+To compile both the server and client run "make" or "make all" on the root folder of the project.
 
 ```sh
 user@USER:~/socksv5-protocol$ make all
