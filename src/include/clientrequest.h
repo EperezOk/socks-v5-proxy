@@ -1,6 +1,8 @@
 #ifndef CLIENTREQUEST_H
 #define CLIENTREQUEST_H
 
+#include "clientargs.h"
+
 #define PROGRAM_VERSION             1
 
 #define BASE_REQUEST_DATA           21
