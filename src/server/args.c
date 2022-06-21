@@ -126,7 +126,6 @@ parse_args(const int argc, char **argv, struct socks5args *args) {
                     exit(1);
                 } else {
                     user(optarg, args->users + nusers, argv[0]);
-                    printf("Found user #%d '%c' of value %s", optind, c, optarg);
                     nusers++;
                 }
                 break;
