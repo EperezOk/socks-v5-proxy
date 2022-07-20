@@ -2,28 +2,22 @@
 
 ## Introduction
 
-The use of network firewalls, systems that effectively isolate an organizations internal network structure from an exterior network, such as the INTERNET is becoming increasingly popular.  These firewall systems typically act as application-layer gateways between networks, usually offering controlled TELNET, FTP, and SMTP access. With the emergence of more sophisticated application layer protocols designed to facilitate global information discovery, there exists a need to provide a general framework for these protocols to transparently and securely traverse a firewall.
-
-There exists, also, a need for strong authentication of such traversal in as fine-grained a manner as is practical. This requirement stems from the realization that client-server relationships emerge between the networks of various organizations, and that such relationships need to be controlled and often strongly authenticated.
+This repository consists in a C-based implementation of the SOCKSv5 Protocol, and contains the following features:
+ - Serve multiple clients simultaneously.
+ - Support user/password authentication according to [RFC 1929](https://datatracker.ietf.org/doc/html/rfc1929).
+ - Support outgoing connections to TCP services, being able to connect to IPv4/IPv6 addresses or FQDN's.
+ - Report bugs to clients.
+ - Implement mechanisms to collect metrics in order to monitor system operation:
+	 - Historical amount of connections.
+	 - Concurrent amount of connections.
+	 - Amount of bytes transferred.
+ - Implement mechanisms that allow managing users and changing server configuration during runtime.
+ - Implement an access log that allows an administrator to understand each user access.
+ - Monitor traffic and generate an access credential log like ettercap for at least POP3.
 
 SOCKSv5 Protocol is designed to provide a framework for client-server applications in both the TCP and UDP domains to conveniently and securely use the services of a network firewall. The protocol is conceptually a "shim-layer" between the application layer and the transport layer, and as such does not provide network-layer gateway services, such as forwarding of ICMP messages.
 
-For more information about this protocol: [RFC 1928](https://datatracker.ietf.org/doc/html/rfc1928)
-
-This repository consists in the implementation of a proxy server for this protocol which MUST contain:
-
- - Serve multiple clients simultaneosly
- - Support user/password authentication according to RFC1929
-	 - More information in: [RFC 1929](https://datatracker.ietf.org/doc/html/rfc1929)
- - Support outgoing connections to TCP services, IPv4 and IPv6 addresses or using FQDN in order to resolve these addresses.
- - Report bugs to clients
- - Implement mechanisms to collect metrics in order to monitor system operation (these metrics can be volatile)
-	 - Historical amount of connections
-	 - Concurrent amount of connections
-	 - Amount of bytes transfered
- - Implement mechanisms that allow managing users and change server configuration in runtime
- - Implement an access log that allows an administrator to understand each user access.
- - Monitor traffic and generate an access credential log like ettercap for at least POP3.
+For more information about this protocol: [RFC 1928](https://datatracker.ietf.org/doc/html/rfc1928).
 
 ## Usage
 
@@ -71,11 +65,11 @@ Options:
 
 ## Files
 
-This project's report is located on the root folder, on the file "Informe.pdf".
+This project's report is located on the root folder, on the file "report.pdf".
 
-The RFC of the monitor protocol designed, "RFC protocolo monitoreo.pdf", is also located on the root folder. This was included in the project to make clear each of the protocol's options, on both requests and responses, along with some examples on how to operate with it.
+The RFC of the monitor protocol designed, "RFC-monitor-protocol-es.pdf", is also located on the root folder. This was included in the project to make clear each part of the protocol's options, on both requests and responses, along with some examples on how to operate it.
 
-Also included on the root folder is a man page, which explains all of the server options and run format. To open it, run "man ./socks5d.8" on the root folder of the project.
+Also included on the root folder is a man page, which explains all of the server options. To open it, run "man ./socks5d.8" on the root folder of the project.
 
 ## Authors
 - 61490 - Baliarda Gonzalo
