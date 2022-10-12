@@ -2,8 +2,8 @@
 
 ## Introduction
 
-This repository consists in a C-based implementation of the SOCKSv5 Protocol, and contains the following features:
- - Serve multiple clients simultaneously.
+This repository consists in a C-based, **non-blocking** implementation of the SOCKSv5 Protocol, and contains the following features:
+ - Serve multiple clients simultaneously and in an **event-driven** fashion.
  - Support user/password authentication according to [RFC 1929](https://datatracker.ietf.org/doc/html/rfc1929).
  - Support outgoing connections to TCP services, being able to connect to IPv4/IPv6 addresses or FQDN's.
  - Report bugs to clients.
